@@ -373,4 +373,63 @@ impl ModLibrary {
             Ok(cached_path.map(|p| p.display().to_string()))
         })
     }
+
+    /// Validate and reconcile the patcher apply state against the actual profiles.
+    /// This is called on startup to detect and clean up any stale patcher sessions.
+    /// 
+    /// If a patcher session crashed or was interrupted, the profile's enabled_mods
+    /// list might reference mods that no longer exist or have invalid state. This
+    /// function validates the state and clears any inconsistent entries.
+    pub fn reconcile_patcher_state(&self, config: &Config) -> AppResult<()> {
+        self.mutate_index(config, |_storage_dir, index| {
+            let active_profile_id = index.active_profile_id.clone();
+            let profile = index
+                .profiles
+                .iter_mut()
+                .find(|p| p.id == active_profile_id)
+                .ok_or_else(|| AppError::Other("Active profile not found".to_string()))?;
+
+            // Validate that all mods in enabled_mods exist in the library
+            let mod_ids: std::collections::HashSet<&str> =
+                index.mods.iter().map(|m| m.id.as_str()).collect();
+
+            let initial_enabled_count = profile.enabled_mods.len();
+            profile.enabled_mods.retain(|mod_id| {
+                let exists = mod_ids.contains(mod_id.as_str());
+                if !exists {
+                    tracing::warn!(
+                        "Removing stale enabled mod on startup: {} (mod not found in library)",
+                        mod_id
+                    );
+                }
+                exists
+            });
+
+            // Validate that all mods in layer_states exist
+            let invalid_mods: Vec<String> = profile
+                .layer_states
+                .keys()
+                .filter(|mod_id| !mod_ids.contains(mod_id.as_str()))
+                .cloned()
+                .collect();
+
+            for mod_id in invalid_mods {
+                tracing::warn!(
+                    "Removing stale layer state on startup: {} (mod not found in library)",
+                    mod_id
+                );
+                profile.layer_states.remove(&mod_id);
+            }
+
+            let final_enabled_count = profile.enabled_mods.len();
+            if final_enabled_count < initial_enabled_count {
+                tracing::info!(
+                    "Reconciled patcher state: removed {} stale enabled mod entries",
+                    initial_enabled_count - final_enabled_count
+                );
+            }
+
+            Ok(())
+        })
+    }
 }
