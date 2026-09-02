@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::config::Config;
-use ltk_meta::{Bin, BinObject};
+use ltk_meta::{Bin, BinFile, BinObject};
 
 /// `SkinCharacterDataProperties`, which 225 of 232 real project bins declare.
 const SKIN: BinHash = BinHash(0x9b67_e9f6);
@@ -236,16 +236,8 @@ fn an_unresolvable_rehash_notes_what_the_repair_is_missing() {
 
     let value: PropertyValueEnum = values::Hash::new(BinHash(0x5ae4_1520)).into();
     let table_build = GameBuild::new(16, 17, 8_087_655);
-    let bin = Bin::new([] as [BinObject<NoMeta>; 0], std::iter::empty::<&str>());
-    let text = note(
-        migration,
-        &value,
-        &BinNames::none(),
-        None,
-        table_build,
-        &bin,
-    )
-    .expect("an unresolvable rehash speaks up");
+    let text = note(migration, &value, &BinNames::none(), None, table_build)
+        .expect("an unresolvable rehash speaks up");
 
     assert!(text.contains("0x5ae41520"), "{text}");
     assert!(text.contains("FNV1a Hash value"), "{text}");
@@ -266,12 +258,8 @@ fn a_rehash_a_table_names_needs_no_note() {
 
     let value: PropertyValueEnum = values::Hash::new(BinHash::hash_str(PATH)).into();
     let table_build = GameBuild::new(16, 17, 8_087_655);
-    let bin = Bin::new([] as [BinObject<NoMeta>; 0], std::iter::empty::<&str>());
 
-    assert_eq!(
-        note(migration, &value, &names, None, table_build, &bin),
-        None
-    );
+    assert_eq!(note(migration, &value, &names, None, table_build), None);
     let drawn = preview(migration, &value, &names).expect("a named hash has a repair");
     assert_eq!(
         drawn.before.as_deref(),
@@ -288,10 +276,7 @@ fn a_rehash_a_table_names_needs_no_note() {
 /// nothing about what is in the file, which is what a reader came for.
 #[test]
 fn a_container_preview_draws_one_path_and_the_count_of_the_rest() {
-    let items = values::Container::String {
-        items: vec![text("a.dds"), text("b.dds"), text("c.dds")],
-        meta: NoMeta,
-    };
+    let items: values::Container = vec![text("a.dds"), text("b.dds"), text("c.dds")].into();
     let problems = found(&bin_with(ALTERNATE_ICONS_CIRCLE, items));
 
     let fix = problems[0].fix.as_ref().unwrap();
@@ -314,10 +299,8 @@ fn a_container_preview_draws_one_path_and_the_count_of_the_rest() {
 /// draws the path, and has nothing left to count.
 #[test]
 fn a_container_of_one_path_draws_the_path_alone() {
-    let items = values::Container::String {
-        items: vec![text("ASSETS/Characters/Smolder/HUD/Smolder_Circle.dds")],
-        meta: NoMeta,
-    };
+    let items: values::Container =
+        vec![text("ASSETS/Characters/Smolder/HUD/Smolder_Circle.dds")].into();
     let problems = found(&bin_with(ALTERNATE_ICONS_CIRCLE, items));
 
     let fix = problems[0].fix.as_ref().unwrap();
@@ -479,11 +462,8 @@ fn hash_value_lowercases_before_it_hashes() {
 
 #[test]
 fn hash_value_rebuilds_a_container_under_the_new_item_type() {
-    let mut value: PropertyValueEnum = values::Container::String {
-        items: vec![text("a.dds"), text("b.dds")],
-        meta: NoMeta,
-    }
-    .into();
+    let mut value: PropertyValueEnum =
+        values::Container::from(vec![text("a.dds"), text("b.dds")]).into();
     assert!(convert(
         &mut value,
         migration_for(ALTERNATE_ICONS_CIRCLE),
@@ -499,41 +479,37 @@ fn hash_value_rebuilds_a_container_under_the_new_item_type() {
 
 #[test]
 fn hash_value_rebuilds_an_optional_and_keeps_it_empty_when_it_was() {
-    let mut present: PropertyValueEnum = values::Optional::String {
-        value: Some(text(ICON)),
-        meta: NoMeta,
-    }
-    .into();
+    let mut present: PropertyValueEnum = values::Optional::from(text(ICON)).into();
     assert!(convert(
         &mut present,
         migration_for(ICON_CIRCLE),
         &BinNames::none()
     ));
-    assert!(matches!(
-        present,
-        PropertyValueEnum::Optional(values::Optional::WadChunkLink { value: Some(_), .. })
-    ));
+    let PropertyValueEnum::Optional(present) = &present else {
+        panic!("expected an Optional");
+    };
+    assert_eq!(present.item_kind(), Kind::WadChunkLink);
+    assert!(present.is_some());
 
-    let mut absent: PropertyValueEnum = values::Optional::String {
-        value: None,
-        meta: NoMeta,
-    }
-    .into();
+    let mut absent: PropertyValueEnum = values::Optional::empty(Kind::String)
+        .expect("a kind an optional can hold")
+        .into();
     assert!(convert(
         &mut absent,
         migration_for(ICON_CIRCLE),
         &BinNames::none()
     ));
-    assert!(matches!(
-        absent,
-        PropertyValueEnum::Optional(values::Optional::WadChunkLink { value: None, .. })
-    ));
+    let PropertyValueEnum::Optional(absent) = &absent else {
+        panic!("expected an Optional");
+    };
+    assert_eq!(absent.item_kind(), Kind::WadChunkLink);
+    assert!(absent.is_none());
 }
 
 #[test]
 fn hash_value_rebuilds_a_map_and_leaves_its_keys_alone() {
     let key: PropertyValueEnum = values::Hash::new(BinHash(0xabcd_1234)).into();
-    let mut map = values::Map::empty(Kind::Hash, Kind::String);
+    let mut map = values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
     map.push(key.clone(), text(ICON).into()).unwrap();
     let mut value: PropertyValueEnum = map.into();
 
@@ -608,7 +584,7 @@ fn a_hash_key_map_is_rekeyed_and_keeps_its_values() {
     let migration = hash_key_migration();
     let (_tmp, names) = names_of(&[A, B]);
 
-    let mut map = values::Map::empty(Kind::Hash, Kind::String);
+    let mut map = values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
     map.push(
         values::Hash::new(BinHash::hash_str(A)).into(),
         text("a").into(),
@@ -647,7 +623,7 @@ fn a_map_with_one_unnamed_key_stays_as_it_is() {
     let migration = hash_key_migration();
     let (_tmp, names) = names_of(&[A]);
 
-    let mut map = values::Map::empty(Kind::Hash, Kind::String);
+    let mut map = values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
     map.push(
         values::Hash::new(BinHash::hash_str(A)).into(),
         text("a").into(),
@@ -699,7 +675,7 @@ fn an_unrepairable_row_prints_the_hashes_no_table_names() {
         "0x5ae41520"
     );
 
-    let mut map = values::Map::empty(Kind::Hash, Kind::String);
+    let mut map = values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
     map.push(
         values::Hash::new(BinHash(0x0000_00aa)).into(),
         text("a").into(),
@@ -714,7 +690,9 @@ fn an_unrepairable_row_prints_the_hashes_no_table_names() {
 
     assert_eq!(
         unresolved(
-            &values::Map::empty(Kind::Hash, Kind::String).into(),
+            &values::Map::empty(Kind::Hash, Kind::String)
+                .expect("kinds a map can hold")
+                .into(),
             &nothing
         ),
         "its keys"
@@ -728,7 +706,7 @@ fn a_half_named_map_prints_only_what_is_missing() {
     const A: &str = "assets/fixture/override_a.dds";
     let (_tmp, names) = names_of(&[A]);
 
-    let mut map = values::Map::empty(Kind::Hash, Kind::String);
+    let mut map = values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
     map.push(
         values::Hash::new(BinHash::hash_str(A)).into(),
         text("a").into(),
@@ -746,7 +724,7 @@ fn a_half_named_map_prints_only_what_is_missing() {
 
 /// Builds a project, runs the check, applies every problem, and hands back
 /// what the run reported plus the bin that landed on disk.
-fn fix_all(bin: &Bin) -> (Applied, Bin) {
+fn fix_all(bin: &Bin) -> (Applied, BinFile) {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("content").join("base").join("data");
     std::fs::create_dir_all(&dir).unwrap();
@@ -781,7 +759,7 @@ fn a_fix_writes_the_link_and_the_run_reports_it() {
     assert_eq!(applied.applied, 1);
     assert_eq!(applied.skipped, 0);
 
-    let value = &written.objects[&ENTRY].properties[&ICON_AVATAR];
+    let value = &written.objects()[&ENTRY].properties[&ICON_AVATAR];
     let PropertyValueEnum::WadChunkLink(link) = value else {
         panic!("expected a WadChunkLink");
     };
@@ -793,7 +771,7 @@ fn a_fix_writes_the_link_and_the_run_reports_it() {
 #[test]
 fn a_second_run_over_a_repaired_file_finds_nothing() {
     let (_, written) = fix_all(&bin_with(ICON_AVATAR, text(ICON)));
-    assert!(found(&written).is_empty());
+    assert!(found(written.as_prop().unwrap()).is_empty());
 }
 
 /// The whole road end to end: the mod's own table names the hash, the check
@@ -837,7 +815,7 @@ fn a_fix_rehashes_a_hash_the_mods_own_table_names() {
     assert_eq!(applied.skipped, 0);
 
     let written = read_bin(&file).unwrap();
-    let value = &written.objects[&ENTRY].properties[&old_asset];
+    let value = &written.objects()[&ENTRY].properties[&old_asset];
     let PropertyValueEnum::WadChunkLink(link) = value else {
         panic!("expected a WadChunkLink");
     };
@@ -864,13 +842,13 @@ fn a_fix_leaves_an_unnamed_hash_alone_and_counts_it_skipped() {
     assert_eq!(applied.applied, 0);
     assert_eq!(applied.skipped, 1);
 
-    let value = &written.objects[&ENTRY].properties[&old_asset];
+    let value = &written.objects()[&ENTRY].properties[&old_asset];
     assert!(matches!(value, PropertyValueEnum::Hash(_)), "untouched");
 }
 
 #[test]
 fn a_fix_repairs_every_shape_the_class_carries() {
-    let mut map = values::Map::empty(Kind::Hash, Kind::String);
+    let mut map = values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
     map.push(values::Hash::new(BinHash(1)).into(), text(ICON).into())
         .unwrap();
 
@@ -878,18 +856,9 @@ fn a_fix_repairs_every_shape_the_class_carries() {
         .property(ICON_AVATAR, text(ICON))
         .property(
             ALTERNATE_ICONS_CIRCLE,
-            values::Container::String {
-                items: vec![text("a.dds")],
-                meta: NoMeta,
-            },
+            values::Container::from(vec![text("a.dds")]),
         )
-        .property(
-            ICON_CIRCLE,
-            values::Optional::String {
-                value: Some(text(ICON)),
-                meta: NoMeta,
-            },
-        )
+        .property(ICON_CIRCLE, values::Optional::from(text(ICON)))
         .property(UNCENSORED_ICON_CIRCLES, map)
         .build();
     let bin = Bin::new([object], std::iter::empty::<&str>());
@@ -898,7 +867,7 @@ fn a_fix_repairs_every_shape_the_class_carries() {
     let (applied, written) = fix_all(&bin);
     assert_eq!(applied.applied, 4);
     assert_eq!(applied.skipped, 0);
-    assert!(found(&written).is_empty());
+    assert!(found(written.as_prop().unwrap()).is_empty());
 }
 
 #[test]
@@ -910,7 +879,7 @@ fn a_fix_leaves_a_property_the_rule_raised_nothing_for_alone() {
     let bin = Bin::new([object], std::iter::empty::<&str>());
 
     let (_, written) = fix_all(&bin);
-    let value = &written.objects[&ENTRY].properties[&BinHash(0xdead_beef)];
+    let value = &written.objects()[&ENTRY].properties[&BinHash(0xdead_beef)];
     let PropertyValueEnum::String(kept) = value else {
         panic!("expected a String");
     };
@@ -943,7 +912,8 @@ fn a_problem_the_file_no_longer_matches_is_counted_as_skipped() {
     assert_eq!(applied.applied, 0);
     assert_eq!(applied.skipped, 1);
 
-    let value = &read_bin(&file).unwrap().objects[&ENTRY].properties[&ICON_AVATAR];
+    let written = read_bin(&file).unwrap();
+    let value = &written.objects()[&ENTRY].properties[&ICON_AVATAR];
     assert!(matches!(value, PropertyValueEnum::I32(_)));
 }
 

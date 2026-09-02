@@ -48,7 +48,7 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 use ltk_hash::{BinHash, Hash as _, WadHash};
 use ltk_meta::PropertyValueEnum;
-use ltk_meta::property::{Kind, NoMeta, values};
+use ltk_meta::property::{Kind, NoMeta, ValueMut, values};
 
 use crate::meta_schema::{self, MetaSchema};
 use crate::problems::budget;
@@ -199,15 +199,6 @@ impl Rule for BinPropertyType {
                     });
                 }
             };
-
-            // `Bin::to_writer` is `todo!()` for an override bin, so writing one
-            // would panic rather than fail. The check raises these with no fix.
-            if bin.is_override {
-                let skipped = wanted.len() as u32;
-                applied.skipped += skipped;
-                run.skipped(&layer, &path, skipped);
-                continue;
-            }
 
             let mut addressed: HashMap<BinHash, HashSet<&str>> = HashMap::new();
             for address in &wanted {
@@ -393,11 +384,8 @@ fn findings_of(
                     lens.names,
                     project.build(),
                     hit.table_build,
-                    &bin,
                 ),
-                fix: (!bin.is_override)
-                    .then(|| preview(&hit.migration, hit.value, lens.names))
-                    .flatten(),
+                fix: preview(&hit.migration, hit.value, lens.names),
             },
         })
         .collect::<Vec<_>>();
@@ -598,9 +586,9 @@ fn descends(value: &PropertyValueEnum) -> bool {
 ///
 /// The check and the repair's own verification are the same call, so a bin
 /// repaired and then re-read is a tree walk rather than a second parse.
-fn check_bin<'a>(bin: &'a ltk_meta::Bin, lens: Lens<'_>) -> Vec<(BinHash, Hit<'a>)> {
+fn check_bin<'a>(bin: &'a ltk_meta::BinFile, lens: Lens<'_>) -> Vec<(BinHash, Hit<'a>)> {
     let mut found = Vec::new();
-    for (entry, object) in &bin.objects {
+    for (entry, object) in bin.objects() {
         let mut here = Vec::new();
         walk(
             object.class_hash,
@@ -671,18 +659,9 @@ fn descend<'a, 'n>(
         }
         /* An `Optional` is indexed rather than descended: BIN_EDITOR.md. */
         PropertyValueEnum::Optional(inner) => {
-            let held = match inner {
-                values::Optional::Struct {
-                    value: Some(held), ..
-                } => Some((held.class_hash, &held.properties)),
-                values::Optional::Embedded {
-                    value: Some(held), ..
-                } => Some((held.0.class_hash, &held.0.properties)),
-                _ => None,
-            };
-            if let Some((class, properties)) = held {
+            if let Some(held) = inner.value() {
                 trail.index(0);
-                walk(class, properties, trail, lens, found);
+                descend(held, trail, lens, found);
                 trail.back();
             }
         }
@@ -703,24 +682,10 @@ fn descend_container<'a, 'n>(
     lens: Lens<'n>,
     found: &mut Vec<Hit<'a>>,
 ) {
-    // Two loops rather than one over a collected list: this runs for every
-    // container node of every bin, and the list would be an allocation each.
-    match items {
-        values::Container::Struct { items, .. } => {
-            for (index, inner) in items.iter().enumerate() {
-                trail.index(index);
-                walk(inner.class_hash, &inner.properties, trail, lens, found);
-                trail.back();
-            }
-        }
-        values::Container::Embedded { items, .. } => {
-            for (index, inner) in items.iter().enumerate() {
-                trail.index(index);
-                walk(inner.0.class_hash, &inner.0.properties, trail, lens, found);
-                trail.back();
-            }
-        }
-        _ => {}
+    for (index, inner) in items.items().iter().enumerate() {
+        trail.index(index);
+        descend(inner, trail, lens, found);
+        trail.back();
     }
 }
 
@@ -734,13 +699,13 @@ fn descend_container<'a, 'n>(
 /// compared, and building it through one shared step is what keeps the two
 /// passes addressing the same node.
 fn fix_bin(
-    bin: &mut ltk_meta::Bin,
+    bin: &mut ltk_meta::BinFile,
     addressed: &HashMap<BinHash, HashSet<&str>>,
     lens: Lens<'_>,
     kept: &mut PreservedNames<'_>,
 ) -> u32 {
     let mut applied = 0;
-    for (entry, object) in &mut bin.objects {
+    for (entry, object) in bin.objects_mut() {
         let Some(addressed) = addressed.get(entry) else {
             continue;
         };
@@ -784,7 +749,7 @@ fn repair<'n>(
         }
 
         if descend_into {
-            applied += repair_into(value, trail, lens, addressed, kept);
+            applied += repair_into(value.as_mut(), trail, lens, addressed, kept);
         }
 
         trail.back();
@@ -821,15 +786,19 @@ fn keep_names(
 }
 
 /// Walk `repair` into whatever object-like nodes `value` holds.
+///
+/// Takes the borrow that cannot change a value's kind, because a container, an
+/// option and a map each declare their item kind once and hand out no other.
+/// A repair only ever edits properties further down, so that is all it needs.
 fn repair_into<'n>(
-    value: &mut PropertyValueEnum,
+    value: ValueMut<'_>,
     trail: &mut Trail<'n>,
     lens: Lens<'n>,
     addressed: &HashSet<&str>,
     kept: &mut PreservedNames<'_>,
 ) -> u32 {
     match value {
-        PropertyValueEnum::Struct(inner) => repair(
+        ValueMut::Struct(inner) => repair(
             inner.class_hash,
             &mut inner.properties,
             trail,
@@ -837,7 +806,7 @@ fn repair_into<'n>(
             addressed,
             kept,
         ),
-        PropertyValueEnum::Embedded(inner) => repair(
+        ValueMut::Embedded(inner) => repair(
             inner.0.class_hash,
             &mut inner.0.properties,
             trail,
@@ -845,44 +814,28 @@ fn repair_into<'n>(
             addressed,
             kept,
         ),
-        PropertyValueEnum::Container(items) => {
-            repair_container(items, trail, lens, addressed, kept)
-        }
-        PropertyValueEnum::UnorderedContainer(items) => {
+        ValueMut::Container(items) => repair_container(items, trail, lens, addressed, kept),
+        ValueMut::UnorderedContainer(items) => {
             repair_container(&mut items.0, trail, lens, addressed, kept)
         }
-        PropertyValueEnum::Optional(inner) => {
-            let held = match inner {
-                values::Optional::Struct {
-                    value: Some(held), ..
-                } => Some((held.class_hash, &mut held.properties)),
-                values::Optional::Embedded {
-                    value: Some(held), ..
-                } => Some((held.0.class_hash, &mut held.0.properties)),
-                _ => None,
-            };
-            match held {
-                Some((class, properties)) => {
-                    trail.index(0);
-                    let applied = repair(class, properties, trail, lens, addressed, kept);
-                    trail.back();
-                    applied
-                }
-                None => 0,
+        ValueMut::Optional(inner) => match inner.slot() {
+            Some(mut slot) => {
+                trail.index(0);
+                let applied = repair_into(slot.as_mut(), trail, lens, addressed, kept);
+                trail.back();
+                applied
             }
-        }
-        PropertyValueEnum::Map(map) => repair_map(map, trail, lens, addressed, kept),
+            None => 0,
+        },
+        ValueMut::Map(map) => repair_map(map, trail, lens, addressed, kept),
         _ => 0,
     }
 }
 
 /// Walk `repair` into a map's values.
 ///
-/// `Map` hands out its entries by value or by shared reference and never by
-/// mutable one, so reaching inside means taking the entries and putting them
-/// back. Only a map whose values are not primitive gets here, and repairing a
-/// property inside one never changes that value's own kind, so the rebuild
-/// cannot be rejected.
+/// The key is written into the trail before the slot is taken, because a map
+/// lends its keys and its values apart and never both at once.
 fn repair_map<'n>(
     map: &mut values::Map,
     trail: &mut Trail<'n>,
@@ -890,20 +843,14 @@ fn repair_map<'n>(
     addressed: &HashSet<&str>,
     kept: &mut PreservedNames<'_>,
 ) -> u32 {
-    let key_kind = map.key_kind();
-    let value_kind = map.value_kind();
-
-    let mut entries =
-        std::mem::replace(map, values::Map::empty(key_kind, value_kind)).into_entries();
     let mut applied = 0;
-    for (key, held) in entries.iter_mut() {
-        trail.key(key, lens.names);
-        applied += repair_into(held, trail, lens, addressed, kept);
+    for index in 0..map.entries().len() {
+        trail.key(&map.entries()[index].0, lens.names);
+        if let Some(mut slot) = map.slot(index) {
+            applied += repair_into(slot.as_mut(), trail, lens, addressed, kept);
+        }
         trail.back();
     }
-
-    *map = values::Map::new(key_kind, value_kind, entries)
-        .expect("repairing a property inside a map value never changes that value's kind");
     applied
 }
 
@@ -916,36 +863,13 @@ fn repair_container<'n>(
     kept: &mut PreservedNames<'_>,
 ) -> u32 {
     let mut applied = 0;
-    match items {
-        values::Container::Struct { items, .. } => {
-            for (index, inner) in items.iter_mut().enumerate() {
-                trail.index(index);
-                applied += repair(
-                    inner.class_hash,
-                    &mut inner.properties,
-                    trail,
-                    lens,
-                    addressed,
-                    kept,
-                );
-                trail.back();
-            }
-        }
-        values::Container::Embedded { items, .. } => {
-            for (index, inner) in items.iter_mut().enumerate() {
-                trail.index(index);
-                applied += repair(
-                    inner.0.class_hash,
-                    &mut inner.0.properties,
-                    trail,
-                    lens,
-                    addressed,
-                    kept,
-                );
-                trail.back();
-            }
-        }
-        _ => {}
+    for index in 0..items.len() {
+        let Some(mut slot) = items.slot(index) else {
+            continue;
+        };
+        trail.index(index);
+        applied += repair_into(slot.as_mut(), trail, lens, addressed, kept);
+        trail.back();
     }
     applied
 }
@@ -1002,7 +926,7 @@ fn rehash_keys(value: &mut PropertyValueEnum, names: &BinNames) -> bool {
     };
 
     let value_kind = map.value_kind();
-    let entries = std::mem::replace(map, values::Map::empty(Kind::Hash, value_kind)).into_entries();
+    let entries = std::mem::take(map).into_entries();
     let rekeyed = entries
         .into_iter()
         .zip(&paths)
@@ -1043,19 +967,30 @@ fn hashed(value: PropertyValueEnum) -> Result<PropertyValueEnum, PropertyValueEn
             Ok(items) => Ok(values::UnorderedContainer(items).into()),
             Err(items) => Err(values::UnorderedContainer(items).into()),
         },
-        PropertyValueEnum::Optional(values::Optional::String { value: text, meta }) => {
-            Ok(values::Optional::WadChunkLink {
-                value: text.map(|text| link(&text.value)),
-                meta,
+        PropertyValueEnum::Optional(option) if option.item_kind() == Kind::String => {
+            /* The outer `None` is an option holding a value that is not the kind
+            it declared. That goes back untouched, the way `hashed_container`
+            hands its container back, rather than being dropped and counted as a
+            repair - the value is read before the option is consumed for that. */
+            let linked = match option.value() {
+                None => Some(None),
+                Some(held) => held
+                    .get::<values::String>()
+                    .map(|text| Some(link(&text.value))),
+            };
+            match linked {
+                Some(linked) => Ok(values::Optional::from(linked).into()),
+                None => Err(option.into()),
             }
-            .into())
         }
         PropertyValueEnum::Map(map) => {
             let key_kind = map.key_kind();
             if map.value_kind() != Kind::String {
                 return Err(map.into());
             }
-            let mut rebuilt = values::Map::empty(key_kind, Kind::WadChunkLink);
+            let Ok(mut rebuilt) = values::Map::empty(key_kind, Kind::WadChunkLink) else {
+                return Err(map.into());
+            };
             for (key, item) in map.into_entries() {
                 let PropertyValueEnum::String(text) = item else {
                     /* `value_kind` already said String, so this cannot happen
@@ -1074,13 +1009,19 @@ fn hashed(value: PropertyValueEnum) -> Result<PropertyValueEnum, PropertyValueEn
 
 /// Rebuild a container of `String` as a container of `File`.
 fn hashed_container(items: values::Container) -> Result<values::Container, values::Container> {
-    let values::Container::String { items: texts, meta } = items else {
+    if items.item_kind() != Kind::String {
         return Err(items);
-    };
-    Ok(values::Container::WadChunkLink {
-        items: texts.iter().map(|text| link(&text.value)).collect(),
-        meta,
-    })
+    }
+    let linked: Option<Vec<_>> = items
+        .items()
+        .iter()
+        .map(|item| Some(link(&item.get::<values::String>()?.value)))
+        .collect();
+    match linked {
+        Some(linked) => Ok(linked.into_iter().collect()),
+        /* The container disagrees with the item kind it declared. */
+        None => Err(items),
+    }
 }
 
 /// Change a type tag or an embedded class hash, moving no value.
@@ -1122,21 +1063,21 @@ fn reclass(value: &mut PropertyValueEnum, class: BinHash) -> bool {
         PropertyValueEnum::UnorderedContainer(items) => &mut items.0,
         _ => return false,
     };
-    match items {
-        values::Container::Embedded { items, .. } => {
-            for inner in items.iter_mut() {
-                inner.0.class_hash = class;
-            }
-            true
-        }
-        values::Container::Struct { items, .. } => {
-            for inner in items.iter_mut() {
-                inner.class_hash = class;
-            }
-            true
-        }
-        _ => false,
+    if !matches!(items.item_kind(), Kind::Struct | Kind::Embedded) {
+        return false;
     }
+
+    for index in 0..items.len() {
+        let Some(mut slot) = items.slot(index) else {
+            continue;
+        };
+        match slot.as_mut() {
+            ValueMut::Struct(inner) => inner.class_hash = class,
+            ValueMut::Embedded(inner) => inner.0.class_hash = class,
+            _ => {}
+        }
+    }
+    true
 }
 
 /// The `File` of a path, which is XXH64 of it lowercased.
@@ -1205,7 +1146,6 @@ fn note(
     names: &BinNames,
     installed: Option<GameBuild>,
     table: GameBuild,
-    bin: &ltk_meta::Bin,
 ) -> Option<String> {
     let mut parts = Vec::new();
 
@@ -1234,9 +1174,7 @@ fn note(
         Conversion::Rehash | Conversion::HashKey | Conversion::HashValue | Conversion::None => {}
     }
 
-    if bin.is_override {
-        parts.push("An override bin cannot be repaired here.".to_owned());
-    } else if installed.is_some_and(|installed| installed < table) {
+    if installed.is_some_and(|installed| installed < table) {
         parts.push("The installed game still wants the old type.".to_owned());
     }
 
@@ -1383,9 +1321,12 @@ fn strings(value: &PropertyValueEnum) -> Vec<&str> {
         PropertyValueEnum::String(text) => vec![text.value.as_str()],
         PropertyValueEnum::Container(items) => container_strings(items),
         PropertyValueEnum::UnorderedContainer(items) => container_strings(&items.0),
-        PropertyValueEnum::Optional(values::Optional::String { value: text, .. }) => {
-            text.iter().map(|text| text.value.as_str()).collect()
-        }
+        PropertyValueEnum::Optional(option) => option
+            .value()
+            .and_then(|held| held.get::<values::String>())
+            .map(|text| text.value.as_str())
+            .into_iter()
+            .collect(),
         PropertyValueEnum::Map(map) => map
             .entries()
             .iter()
@@ -1399,12 +1340,11 @@ fn strings(value: &PropertyValueEnum) -> Vec<&str> {
 }
 
 fn container_strings(items: &values::Container) -> Vec<&str> {
-    match items {
-        values::Container::String { items, .. } => {
-            items.iter().map(|text| text.value.as_str()).collect()
-        }
-        _ => Vec::new(),
-    }
+    items
+        .items()
+        .iter()
+        .filter_map(|item| Some(item.get::<values::String>()?.value.as_str()))
+        .collect()
 }
 
 /// How many values a repair rewrites, as a row says it.
@@ -1421,20 +1361,18 @@ fn count(value: &PropertyValueEnum) -> usize {
         PropertyValueEnum::Container(items) => container_len(items),
         PropertyValueEnum::UnorderedContainer(items) => container_len(&items.0),
         PropertyValueEnum::Map(map) => map.entries().len(),
-        PropertyValueEnum::Optional(values::Optional::String { value: text, .. }) => {
-            usize::from(text.is_some())
+        PropertyValueEnum::Optional(option) if option.item_kind() == Kind::String => {
+            usize::from(option.is_some())
         }
         _ => 1,
     }
 }
 
 fn container_len(items: &values::Container) -> usize {
-    match items {
-        values::Container::String { items, .. } => items.len(),
-        values::Container::WadChunkLink { items, .. } => items.len(),
-        values::Container::Hash { items, .. } => items.len(),
-        values::Container::Struct { items, .. } => items.len(),
-        values::Container::Embedded { items, .. } => items.len(),
+    match items.item_kind() {
+        Kind::String | Kind::WadChunkLink | Kind::Hash | Kind::Struct | Kind::Embedded => {
+            items.len()
+        }
         _ => 0,
     }
 }
@@ -1468,13 +1406,13 @@ fn group_by_file<'a>(problems: &[&'a Problem]) -> Vec<((String, String), Vec<&'a
 ///
 /// Reports the file it could not open or parse, as one sentence for the panel.
 #[cfg(test)]
-fn read_bin(path: &std::path::Path) -> Result<ltk_meta::Bin, String> {
+fn read_bin(path: &std::path::Path) -> Result<ltk_meta::BinFile, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     read_bin_bytes(&bytes)
 }
 
-fn read_bin_bytes(bytes: &[u8]) -> Result<ltk_meta::Bin, String> {
-    ltk_meta::Bin::from_reader(&mut std::io::Cursor::new(bytes)).map_err(|e| e.to_string())
+fn read_bin_bytes(bytes: &[u8]) -> Result<ltk_meta::BinFile, String> {
+    ltk_meta::BinFile::from_reader(&mut std::io::Cursor::new(bytes)).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

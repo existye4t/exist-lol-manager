@@ -151,11 +151,14 @@ impl TypeSpec {
         let Some(class) = self.class else {
             return true;
         };
-        match container {
-            Container::Embedded { items, .. } => items.iter().all(|it| it.0.class_hash == class),
-            Container::Struct { items, .. } => items.iter().all(|it| it.class_hash == class),
-            _ => false,
+        if !matches!(container.item_kind(), Kind::Struct | Kind::Embedded) {
+            return false;
         }
+        container.items().iter().all(|item| match item {
+            PropertyValueEnum::Embedded(it) => it.0.class_hash == class,
+            PropertyValueEnum::Struct(it) => it.class_hash == class,
+            _ => false,
+        })
     }
 
     fn matches_class(&self, class: BinHash) -> bool {
@@ -577,7 +580,8 @@ mod tests {
         let migration = row("UiElementParticleSystemData", "TextureOverrides");
         assert_eq!(migration.conversion, Conversion::HashKey);
 
-        let mut hashed = values::Map::empty(Kind::Hash, Kind::String);
+        let mut hashed =
+            values::Map::empty(Kind::Hash, Kind::String).expect("kinds a map can hold");
         hashed
             .push(
                 PropertyValueEnum::Hash(values::Hash::new(7u32)),
@@ -588,11 +592,15 @@ mod tests {
         assert!(migration.from.matches(&hashed));
         assert!(!migration.to.matches(&hashed));
 
-        let linked = PropertyValueEnum::Map(values::Map::empty(Kind::WadChunkLink, Kind::String));
+        let linked = PropertyValueEnum::Map(
+            values::Map::empty(Kind::WadChunkLink, Kind::String).expect("kinds a map can hold"),
+        );
         assert!(migration.to.matches(&linked));
         assert!(!migration.from.matches(&linked));
 
-        let wrong_value = PropertyValueEnum::Map(values::Map::empty(Kind::Hash, Kind::I32));
+        let wrong_value = PropertyValueEnum::Map(
+            values::Map::empty(Kind::Hash, Kind::I32).expect("kinds a map can hold"),
+        );
         assert!(!migration.from.matches(&wrong_value));
     }
 

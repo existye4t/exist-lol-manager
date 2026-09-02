@@ -34,7 +34,7 @@
 //!   no copy of what it was.
 
 use ltk_hash::BinHash;
-use ltk_meta::{Bin, PropertyValueEnum};
+use ltk_meta::{BinFile, PropertyValueEnum};
 
 use crate::problems::budget;
 use crate::problems::game::GameContent;
@@ -209,8 +209,8 @@ fn losses_in(handle: &FileHandle<'_>, game: &dyn GameContent) -> Result<Vec<Loss
 }
 
 /// Parse the game's own copy of a bin.
-fn parsed(bytes: &[u8]) -> Result<Bin, String> {
-    Bin::from_reader(&mut std::io::Cursor::new(bytes)).map_err(|e| e.to_string())
+fn parsed(bytes: &[u8]) -> Result<BinFile, String> {
+    BinFile::from_reader(&mut std::io::Cursor::new(bytes)).map_err(|e| e.to_string())
 }
 
 /// How many keys each of a bin's resolvers holds.
@@ -218,8 +218,8 @@ fn parsed(bytes: &[u8]) -> Result<Bin, String> {
 /// Top-level objects only, which is where a resolver lives: it is addressed by
 /// its own path hash, and one nested inside another object would have no hash
 /// for a site to name it by.
-fn resolvers_in(bin: &Bin) -> std::collections::HashMap<BinHash, usize> {
-    bin.objects
+fn resolvers_in(bin: &BinFile) -> std::collections::HashMap<BinHash, usize> {
+    bin.objects()
         .iter()
         .filter(|(_, object)| object.class_hash == RESOURCE_RESOLVER)
         .filter_map(|(hash, object)| Some((*hash, keys_in(object.properties.get(&RESOURCE_MAP)?)?)))

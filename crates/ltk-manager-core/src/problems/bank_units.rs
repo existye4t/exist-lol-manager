@@ -97,9 +97,9 @@ impl BankUnits {
 }
 
 /// Every path the bank units of one bin name, each with the hash of it.
-fn asked_in(bin: &ltk_meta::Bin) -> Vec<(WadHash, String)> {
+fn asked_in(bin: &ltk_meta::BinFile) -> Vec<(WadHash, String)> {
     let mut found = Vec::new();
-    for object in bin.objects.values() {
+    for object in bin.objects().values() {
         walk(object.class_hash, &object.properties, &mut found);
     }
     found
@@ -125,14 +125,14 @@ fn walk(
 /// The strings a list property holds, ordered or not.
 fn strings_in(value: &PropertyValueEnum) -> impl Iterator<Item = &str> {
     let items = match value {
-        PropertyValueEnum::Container(values::Container::String { items, .. }) => Some(items),
-        PropertyValueEnum::UnorderedContainer(items) => match &items.0 {
-            values::Container::String { items, .. } => Some(items),
-            _ => None,
-        },
+        PropertyValueEnum::Container(items) => Some(items),
+        PropertyValueEnum::UnorderedContainer(items) => Some(&items.0),
         _ => None,
     };
-    items.into_iter().flatten().map(|held| held.value.as_str())
+    items
+        .into_iter()
+        .flat_map(values::Container::items)
+        .filter_map(|held| Some(held.get::<values::String>()?.value.as_str()))
 }
 
 /// Walk into whatever object-like nodes `value` holds.
@@ -142,15 +142,11 @@ fn descend(value: &PropertyValueEnum, found: &mut Vec<(WadHash, String)>) {
         PropertyValueEnum::Embedded(inner) => walk(inner.0.class_hash, &inner.0.properties, found),
         PropertyValueEnum::Container(items) => descend_container(items, found),
         PropertyValueEnum::UnorderedContainer(items) => descend_container(&items.0, found),
-        PropertyValueEnum::Optional(inner) => match inner {
-            values::Optional::Struct {
-                value: Some(held), ..
-            } => walk(held.class_hash, &held.properties, found),
-            values::Optional::Embedded {
-                value: Some(held), ..
-            } => walk(held.0.class_hash, &held.0.properties, found),
-            _ => {}
-        },
+        PropertyValueEnum::Optional(inner) => {
+            if let Some(held) = inner.value() {
+                descend(held, found);
+            }
+        }
         PropertyValueEnum::Map(map) => {
             for (_, held) in map.entries() {
                 descend(held, found);
@@ -161,17 +157,7 @@ fn descend(value: &PropertyValueEnum, found: &mut Vec<(WadHash, String)>) {
 }
 
 fn descend_container(items: &values::Container, found: &mut Vec<(WadHash, String)>) {
-    match items {
-        values::Container::Struct { items, .. } => {
-            for inner in items {
-                walk(inner.class_hash, &inner.properties, found);
-            }
-        }
-        values::Container::Embedded { items, .. } => {
-            for inner in items {
-                walk(inner.0.class_hash, &inner.0.properties, found);
-            }
-        }
-        _ => {}
+    for inner in items.items() {
+        descend(inner, found);
     }
 }

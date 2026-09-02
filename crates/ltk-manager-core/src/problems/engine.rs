@@ -512,15 +512,18 @@ impl<'a> FileHandle<'a> {
         self.layer.source.read(self.file)
     }
 
-    /// Parse the file as a property bin.
+    /// Parse the file as a bin of either kind.
+    ///
+    /// A `PTCH` is as much a bin as a `PROP` and carries objects of its own, so
+    /// a rule that walks objects reads both and never has to ask which it got.
     ///
     /// # Errors
     ///
     /// Reports the file it could not open or parse, as one sentence a panel
     /// can draw.
-    pub fn bin(&self) -> Result<ltk_meta::Bin, String> {
+    pub fn bin(&self) -> Result<ltk_meta::BinFile, String> {
         let bytes = self.bytes()?;
-        ltk_meta::Bin::from_reader(&mut std::io::Cursor::new(&bytes)).map_err(|e| e.to_string())
+        ltk_meta::BinFile::from_reader(&mut std::io::Cursor::new(&bytes)).map_err(|e| e.to_string())
     }
 }
 

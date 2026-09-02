@@ -445,7 +445,10 @@ mod archive {
         let handle = files.bins().next().expect("the packed WAD holds one bin");
         assert_eq!(handle.layer(), "base");
         assert_eq!(handle.path(), BIN_IN_LAYER);
-        assert_eq!(bin_bytes(&handle.bin().unwrap()), bin_bytes(&stale_bin()));
+        assert_eq!(
+            bin_bytes(handle.bin().unwrap().as_prop().unwrap()),
+            bin_bytes(&stale_bin())
+        );
     }
 
     /// A deflated entry cannot be seeked into, so it is inflated whole first.
@@ -459,7 +462,10 @@ mod archive {
 
         let handle = files.bins().next().expect("the packed WAD holds one bin");
         assert_eq!(handle.path(), BIN_IN_LAYER);
-        assert_eq!(bin_bytes(&handle.bin().unwrap()), bin_bytes(&stale_bin()));
+        assert_eq!(
+            bin_bytes(handle.bin().unwrap().as_prop().unwrap()),
+            bin_bytes(&stale_bin())
+        );
     }
 
     #[test]
@@ -472,7 +478,10 @@ mod archive {
 
         let handle = files.bins().next().expect("the archive holds one bin");
         assert_eq!(handle.path(), BIN_IN_LAYER);
-        assert_eq!(bin_bytes(&handle.bin().unwrap()), bin_bytes(&stale_bin()));
+        assert_eq!(
+            bin_bytes(handle.bin().unwrap().as_prop().unwrap()),
+            bin_bytes(&stale_bin())
+        );
     }
 
     /// A chunk nothing names is listed under its bare hash, which is what the
@@ -517,7 +526,10 @@ mod archive {
         let files = files_in(&archive, &resolver_naming(&[]));
 
         let handle = files.bins().next().expect("the nameless chunk is a bin");
-        assert_eq!(bin_bytes(&handle.bin().unwrap()), bin_bytes(&stale_bin()));
+        assert_eq!(
+            bin_bytes(handle.bin().unwrap().as_prop().unwrap()),
+            bin_bytes(&stale_bin())
+        );
     }
 
     /// A deflated WAD is inflated whole and read out of memory, so the sniff
@@ -581,7 +593,10 @@ mod archive {
 
         let handle = files.bins().next().expect("the archive holds one bin");
         assert_eq!(handle.path(), "raw/data/skin0.bin");
-        assert_eq!(bin_bytes(&handle.bin().unwrap()), bin_bytes(&stale_bin()));
+        assert_eq!(
+            bin_bytes(handle.bin().unwrap().as_prop().unwrap()),
+            bin_bytes(&stale_bin())
+        );
     }
 
     /// Story: the check that used to unpack a gigabyte reports what the

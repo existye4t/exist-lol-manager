@@ -376,7 +376,7 @@ impl ModLibrary {
 
     /// Validate and reconcile the patcher apply state against the actual profiles.
     /// This is called on startup to detect and clean up any stale patcher sessions.
-    /// 
+    ///
     /// If a patcher session crashed or was interrupted, the profile's enabled_mods
     /// list might reference mods that no longer exist or have invalid state. This
     /// function validates the state and clears any inconsistent entries.

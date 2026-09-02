@@ -54,13 +54,12 @@ fn bin_asking_for(paths: &[&str]) -> Vec<u8> {
         class_hash: UNIT,
         properties: [(
             UNIT_PATH,
-            PropertyValueEnum::Container(values::Container::String {
-                items: paths
+            PropertyValueEnum::Container(
+                paths
                     .iter()
                     .map(|path| values::String::new((*path).to_owned()))
                     .collect(),
-                meta: NoMeta,
-            }),
+            ),
         )]
         .into_iter()
         .collect(),
@@ -71,10 +70,7 @@ fn bin_asking_for(paths: &[&str]) -> Vec<u8> {
         [BinObject::<NoMeta>::builder(ENTRY, SKIN_AUDIO)
             .property(
                 BANK_UNITS,
-                PropertyValueEnum::Container(values::Container::Embedded {
-                    items: vec![values::Embedded(unit)],
-                    meta: NoMeta,
-                }),
+                PropertyValueEnum::Container(vec![values::Embedded(unit)].into()),
             )
             .build()],
         std::iter::empty::<&str>(),

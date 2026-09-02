@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use ltk_hash::Hash as _;
 use ltk_meta::property::{Kind, NoMeta, values};
-use ltk_meta::{BinObject, PropertyValueEnum};
+use ltk_meta::{Bin, BinObject, PropertyValueEnum};
 
 use super::*;
 use crate::config::Config;
