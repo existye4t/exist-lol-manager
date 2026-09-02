@@ -1,4 +1,4 @@
-mod download;
+﻿mod download;
 
 pub use download::download_mod_file;
 #[cfg(test)]
@@ -619,7 +619,7 @@ mod tests {
             "ltk://install?url=https://cdn.example.com/mod.modpkg&name=%E2%9C%A8%20Sparkle%20Skin&source=My%20Site",
         )
         .unwrap();
-        assert_eq!(req.name.as_deref(), Some("✨ Sparkle Skin"));
+        assert_eq!(req.name.as_deref(), Some("âœ¨ Sparkle Skin"));
         assert_eq!(req.source.as_deref(), Some("My Site"));
     }
 
@@ -681,11 +681,10 @@ mod tests {
         assert!(result.is_none());
     }
 
-        let long_name: String = "あ".repeat(300);
-        let url = format!(
-            "ltk://install?url=https://cdn.example.com/mod.modpkg&name={}",
-            long_name
-        );
+    #[test]
+    fn truncates_long_name() {
+        let long_name: String = "ã‚".repeat(300);
+        let url = format!("ltk://install?url=https://cdn.example.com/mod.modpkg&name={}", long_name);
         let req = install(&url).unwrap();
         assert_eq!(req.name.as_ref().unwrap().chars().count(), 256);
     }
