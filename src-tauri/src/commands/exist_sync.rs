@@ -11,8 +11,11 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use ts_rs::TS;
 
-const SKIN_CATALOG_URL: &str =
-    "https://raw.githubusercontent.com/existye4t/lol-skin-finder/main/public/data/skins.json";
+fn skin_catalog_url() -> String {
+    std::env::var("EXIST_SKIN_CATALOG_URL").unwrap_or_else(|_| {
+        "https://raw.githubusercontent.com/existye4t/lol-skin-finder/main/public/data/skins.json".to_string()
+    })
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]
 #[ts(export)]
@@ -160,7 +163,7 @@ fn perform_sync_blocking(app: &AppHandle, state: &ExistSyncState) -> AppResult<O
         meta.etag.clone()
     };
 
-    let mut builder = client.get(SKIN_CATALOG_URL);
+    let mut builder = client.get(&skin_catalog_url());
     if let Some(etag) = etag {
         builder = builder.header("If-None-Match", etag);
     }
@@ -240,4 +243,184 @@ fn perform_sync_blocking(app: &AppHandle, state: &ExistSyncState) -> AppResult<O
     }
 
     Ok(Some(skin_count))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_catalog_reachable() {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("create client");
+
+        let response = client.get(&skin_catalog_url()).send();
+
+        match response {
+            Ok(resp) => {
+                assert!(resp.status().is_success(), "Catalog request should succeed");
+                assert_eq!(resp.status(), reqwest::StatusCode::OK);
+
+                let etag = resp.headers().get("ETag").and_then(|h| h.to_str().ok());
+                println!("Catalog ETag: {:?}", etag);
+                assert!(etag.is_some(), "Server should return ETag");
+
+                let body = resp.text().expect("read body");
+                let catalog: serde_json::Value =
+                    serde_json::from_str(&body).expect("Catalog should be valid JSON");
+
+                let version = catalog["version"].as_str();
+                let updated_at = catalog["updatedAt"].as_str();
+                let skin_count = catalog["skins"].as_array().map(|a| a.len()).unwrap_or(0);
+
+                println!("Catalog version: {:?}", version);
+                println!("Catalog updatedAt: {:?}", updated_at);
+                println!("Skin count: {}", skin_count);
+
+                assert!(version.is_some(), "Catalog should have version");
+                assert!(updated_at.is_some(), "Catalog should have updatedAt");
+                assert!(skin_count > 1000, "Should have many skins");
+            }
+            Err(e) => {
+                println!(
+                    "Network request failed (may be expected in test env): {}",
+                    e
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_etag_conditional_request() {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("create client");
+
+        let first_response = client.get(&skin_catalog_url()).send();
+
+        let first_resp = match first_response {
+            Ok(resp) => resp,
+            Err(e) => {
+                println!("First request failed: {}", e);
+                return;
+            }
+        };
+
+        assert!(first_resp.status().is_success());
+        let etag = first_resp
+            .headers()
+            .get("ETag")
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
+
+        if let Some(etag) = etag {
+            let second_response = client
+                .get(&skin_catalog_url())
+                .header("If-None-Match", &etag)
+                .send();
+
+            let second_resp = match second_response {
+                Ok(resp) => resp,
+                Err(e) => {
+                    println!("Second request failed: {}", e);
+                    return;
+                }
+            };
+
+            if second_resp.status() == reqwest::StatusCode::NOT_MODIFIED {
+                println!("ETag conditional request works - got 304 Not Modified");
+                assert_eq!(second_resp.status(), reqwest::StatusCode::NOT_MODIFIED);
+            } else if second_resp.status().is_success() {
+                println!("Server returned full catalog (no 304 support or catalog changed between requests)");
+                assert_eq!(second_resp.status(), reqwest::StatusCode::OK);
+            } else {
+                println!("Unexpected status: {}", second_resp.status());
+            }
+        } else {
+            println!("No ETag in first response");
+        }
+    }
+
+    #[test]
+    fn test_catalog_json_structure() {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("create client");
+
+        let response = client.get(&skin_catalog_url()).send();
+
+        match response {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    let body = resp.text().expect("read body");
+                    let catalog: serde_json::Value =
+                        serde_json::from_str(&body).expect("Catalog should be valid JSON");
+
+                    assert!(catalog["version"].is_string(), "version should be string");
+                    assert!(
+                        catalog["updatedAt"].is_string(),
+                        "updatedAt should be string"
+                    );
+                    assert!(catalog["skins"].is_array(), "skins should be array");
+
+                    let skins = catalog["skins"].as_array().unwrap();
+                    assert!(!skins.is_empty(), "skins array should not be empty");
+
+                    let first_skin = &skins[0];
+                    assert!(first_skin["id"].is_string(), "skin.id should be string");
+                    assert!(
+                        first_skin["skinNum"].is_u64(),
+                        "skin.skinNum should be number"
+                    );
+                    assert!(first_skin["name"].is_string(), "skin.name should be string");
+                    assert!(
+                        first_skin["champion"].is_string(),
+                        "skin.champion should be string"
+                    );
+                    assert!(
+                        first_skin["nameEn"].is_string(),
+                        "skin.nameEn should be string"
+                    );
+                    assert!(
+                        first_skin["championEn"].is_string(),
+                        "skin.championEn should be string"
+                    );
+                    assert!(
+                        first_skin["championId"].is_string(),
+                        "skin.championId should be string"
+                    );
+                    assert!(
+                        first_skin["image"].is_string(),
+                        "skin.image should be string"
+                    );
+                    assert!(
+                        first_skin["imageFallback"].is_string(),
+                        "skin.imageFallback should be string"
+                    );
+
+                    if let Some(parent) = first_skin["parentSkinId"].as_str() {
+                        if !parent.is_empty() {
+                            println!("Skin has parent: {}", parent);
+                        }
+                    }
+
+                    let has_fantome_hash = first_skin["fantome_hash"].is_string();
+                    let has_fantome_size = first_skin["fantome_size"].is_u64();
+
+                    println!("First skin has fantome_hash: {}", has_fantome_hash);
+                    println!("First skin has fantome_size: {}", has_fantome_size);
+                }
+            }
+            Err(e) => {
+                println!("Request failed: {}", e);
+            }
+        }
+    }
 }

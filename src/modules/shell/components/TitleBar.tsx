@@ -34,8 +34,7 @@ import { NotificationCenter } from "./NotificationCenter";
 import { UpdateButton } from "./UpdateButton";
 
 const navItems = [
-  { to: "/", label: "Mods", icon: CollectionIcon, exact: true },
-  { to: "/skins", label: "Skins", icon: SkinIcon, exact: false },
+  { to: "/skins", label: "Skins", icon: SkinIcon, exact: true },
   { to: "/workshop", label: "Workshop", icon: LootIcon, exact: false },
 ] as const;
 

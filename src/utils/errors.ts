@@ -19,3 +19,8 @@ export function isAppError(error: unknown): error is AppError {
     typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
   );
 }
+
+/** Extract a human-readable message from an AppError. */
+export function getAppErrorMessage(error: AppError): string {
+  return "detail" in error ? error.detail : error.code;
+}

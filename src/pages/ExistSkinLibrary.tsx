@@ -41,6 +41,7 @@ import {
   useRuneforgeThumbnail,
 } from "@/modules/runeforge/api";
 import { usePatcherSessionStore } from "@/stores";
+import { getAppErrorMessage } from "@/utils/errors";
 import { formatBytes } from "@/utils/formatBytes";
 type View = "library" | "featured" | "downloads" | "cache" | "custom" | "runeforge";
 type Progress = {
@@ -199,7 +200,7 @@ export function ExistSkinLibrary() {
           `${info.remoteSize ? `v${info.remoteSize}` : "Updated successfully"}`,
         );
       } else {
-        throw new Error(result.error?.message || "Update failed");
+        throw new Error(getAppErrorMessage(result.error) || "Update failed");
       }
     } catch (error) {
       setUpdatingSkins((prev) => ({
@@ -367,7 +368,7 @@ export function ExistSkinLibrary() {
       await refreshInstalled();
       toast.success("Skin unapplied", `${nameOf(skin)} was unapplied.`);
     } else {
-      toast.error("Could not unapply skin", result.error.message);
+      toast.error("Could not unapply skin", getAppErrorMessage(result.error));
     }
   }
 
@@ -381,7 +382,7 @@ export function ExistSkinLibrary() {
       await refreshInstalled();
       toast.success("Skin deleted", `${nameOf(skin)} was removed from cache.`);
     } else {
-      toast.error("Could not delete skin", result.error.message);
+      toast.error("Could not delete skin", getAppErrorMessage(result.error));
     }
   }
 
@@ -396,7 +397,7 @@ export function ExistSkinLibrary() {
     const result = await api.installMod(selected);
     setImporting(false);
     if (!result.ok) {
-      toast.error("Import failed", result.error.message);
+      toast.error("Import failed", getAppErrorMessage(result.error));
       return;
     }
     setLocalMods((mods) => [result.value, ...mods.filter((mod) => mod.id !== result.value.id)]);
@@ -406,7 +407,7 @@ export function ExistSkinLibrary() {
   async function handleLocalToggle(mod: InstalledMod, enabled: boolean) {
     const result = await api.toggleMod(mod.id, enabled);
     if (result.ok) await refreshLocalMods();
-    else toast.error("Could not update skin", result.error.message);
+    else toast.error("Could not update skin", getAppErrorMessage(result.error));
   }
 
   async function handleLocalUninstall(mod: InstalledMod) {
@@ -414,7 +415,7 @@ export function ExistSkinLibrary() {
     if (result.ok) {
       setLocalMods((mods) => mods.filter((item) => item.id !== mod.id));
       toast.success("Skin removed", `${mod.displayName} was removed from your local library.`);
-    } else toast.error("Could not remove skin", result.error.message);
+    } else toast.error("Could not remove skin", getAppErrorMessage(result.error));
   }
 
   function openChampion(champName: string, skinId?: string) {

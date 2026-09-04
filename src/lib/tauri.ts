@@ -17,7 +17,6 @@ import type {
   ExistCatalog,
   ExistDownloadTask,
   ExistInstall,
-  ExistSkin,
   ExistSkinCatalogStatus,
   ExistSkinUpdateInfo,
   ExtractOptions,

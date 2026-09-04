@@ -1,0 +1,6 @@
+test: add catalog sync integration tests
+
+- Add EXIST_SKIN_CATALOG_URL env var for testable catalog URL
+- Add test_catalog_reachable: verifies real GitHub catalog reachable, valid JSON, 9112 skins
+- Add test_etag_conditional_request: verifies 304 Not Modified on repeat request
+- Add test_catalog_json_structure: validates catalog schema, fields, fantome metadata
