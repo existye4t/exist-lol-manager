@@ -14,6 +14,12 @@ import type {
   DecodedIncident,
   DiagnosticReport,
   EditModMetadataArgs,
+  ExistCatalog,
+  ExistDownloadTask,
+  ExistInstall,
+  ExistSkin,
+  ExistSkinCatalogStatus,
+  ExistSkinUpdateInfo,
   ExtractOptions,
   ExtractPlan,
   ExtractSummary,
@@ -37,6 +43,7 @@ import type {
   ImportFantomeArgs,
   ImportGitRepoArgs,
   Incident,
+  InstalledExistSkin,
   InstalledMod,
   LaunchAvailability,
   LaunchOutcome,
@@ -58,6 +65,9 @@ import type {
   Profile,
   ReleasePage,
   Run,
+  RuneforgeCatalog,
+  RuneforgeCatalogQuery,
+  RuneforgeChampions,
   SaveProjectConfigArgs,
   SessionStarted,
   Settings,
@@ -125,6 +135,35 @@ export type DeepLinkBlockedPayload = {
 
 // API functions
 export const api = {
+  // Exist Skin Library
+  getExistCatalog: () => invokeResult<ExistCatalog>("get_exist_catalog"),
+  downloadExistSkin: (skinId: string) =>
+    invokeResult<ExistInstall>("download_exist_skin", { skinId }),
+  updateExistSkin: (skinId: string) => invokeResult<ExistInstall>("update_exist_skin", { skinId }),
+  enqueueExistDownload: (skinId: string) =>
+    invokeResult<void>("enqueue_exist_download", { skinId }),
+  getExistDownloadQueue: () => invokeResult<ExistDownloadTask[]>("get_exist_download_queue"),
+  pauseExistDownload: (skinId: string) => invokeResult<void>("pause_exist_download", { skinId }),
+  resumeExistDownload: (skinId: string) => invokeResult<void>("resume_exist_download", { skinId }),
+  cancelExistDownload: (skinId: string) => invokeResult<void>("cancel_exist_download", { skinId }),
+  retryExistDownload: (skinId: string) => invokeResult<void>("retry_exist_download", { skinId }),
+  removeExistDownload: (skinId: string) => invokeResult<void>("remove_exist_download", { skinId }),
+  getInstalledExistSkins: () => invokeResult<InstalledExistSkin[]>("get_installed_exist_skins"),
+  applyExistSkin: (skinId: string) => invokeResult<void>("apply_exist_skin", { skinId }),
+  unapplyExistSkin: (skinId: string) => invokeResult<void>("unapply_exist_skin", { skinId }),
+  deleteExistSkin: (skinId: string) => invokeResult<void>("delete_exist_skin", { skinId }),
+  getExistSkinsUpdateStatus: () =>
+    invokeResult<ExistSkinUpdateInfo[]>("get_exist_skins_update_status"),
+  syncExistSkinCatalog: () => invokeResult<ExistSkinCatalogStatus>("sync_exist_skin_catalog"),
+  getExistCatalogStatus: () => invokeResult<ExistSkinCatalogStatus>("get_exist_catalog_status"),
+
+  // RuneForge
+  getRuneforgeCatalog: (query: RuneforgeCatalogQuery) =>
+    invokeResult<RuneforgeCatalog>("get_runeforge_catalog", { query }),
+  getRuneforgeChampions: () => invokeResult<RuneforgeChampions>("get_runeforge_champions"),
+  getRuneforgeThumbnail: (thumbnailKey: string) =>
+    invokeResult<string | null>("get_runeforge_thumbnail", { thumbnailKey }),
+
   getAppInfo: () => invokeResult<AppInfo>("get_app_info"),
   getPlatformSupport: () => invokeResult<PlatformSupport>("get_platform_support"),
   showMainWindow: () => invokeResult<void>("show_main_window"),

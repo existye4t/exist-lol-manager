@@ -2924,6 +2924,7 @@ dependencies = [
  "chrono",
  "filetime",
  "flate2",
+ "hex",
  "image",
  "indexmap 2.14.0",
  "ltk-manager-core",
@@ -2965,7 +2966,6 @@ dependencies = [
  "walkdir",
  "windows-sys 0.59.0",
  "zip 2.4.2",
- "zstd",
 ]
 
 [[package]]

@@ -21,6 +21,7 @@ import {
   PoroIcon,
   ScuttleIcon,
   Separator,
+  SkinIcon,
   Tooltip,
   useToast,
 } from "@/components";
@@ -34,6 +35,7 @@ import { UpdateButton } from "./UpdateButton";
 
 const navItems = [
   { to: "/", label: "Mods", icon: CollectionIcon, exact: true },
+  { to: "/skins", label: "Skins", icon: SkinIcon, exact: false },
   { to: "/workshop", label: "Workshop", icon: LootIcon, exact: false },
 ] as const;
 
@@ -166,7 +168,7 @@ interface TitleBarProps {
   appInfo?: AppInfo;
 }
 
-export function TitleBar({ title = "LTK Manager", appInfo }: TitleBarProps) {
+export function TitleBar({ title = "Exist Manager", appInfo }: TitleBarProps) {
   const { data: platform } = usePlatformSupport();
   const isMacOS = platform?.os === "macos";
   const { latest, data: incidents } = useLatestIncident();
@@ -254,6 +256,17 @@ export function TitleBar({ title = "LTK Manager", appInfo }: TitleBarProps) {
       <div className="flex h-full items-center">
         <div className="flex h-full items-center">
           <UpdateButton />
+
+          <Tooltip content="Open LTK Manager (Mods & Workshop)">
+            <Link
+              to="/ltk"
+              activeProps={{ className: twMerge(iconNavBase, iconNavActive) }}
+              inactiveProps={{ className: twMerge(iconNavBase, iconNavInactive) }}
+              aria-label="Open LTK Manager (Mods & Workshop)"
+            >
+              <CollectionIcon className="h-4 w-4" />
+            </Link>
+          </Tooltip>
 
           <Tooltip content="Open storage directory">
             <IconButton

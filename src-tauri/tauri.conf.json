@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "LTK Manager",
+  "productName": "Exist Manager",
   "identifier": "dev.leaguetoolkit.manager",
   "build": {
     "beforeDevCommand": "pnpm dev",

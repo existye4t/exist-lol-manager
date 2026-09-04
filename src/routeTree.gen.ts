@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkshopRouteImport } from './routes/workshop'
+import { Route as SkinsRouteImport } from './routes/skins'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as LtkRouteImport } from './routes/ltk'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkshopIndexRouteImport } from './routes/workshop/index'
@@ -22,9 +24,19 @@ const WorkshopRoute = WorkshopRouteImport.update({
   path: '/workshop',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SkinsRoute = SkinsRouteImport.update({
+  id: '/skins',
+  path: '/skins',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LtkRoute = LtkRouteImport.update({
+  id: '/ltk',
+  path: '/ltk',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DiagnosticsRoute = DiagnosticsRouteImport.update({
@@ -56,7 +68,9 @@ const FolderFolderIdRoute = FolderFolderIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/diagnostics': typeof DiagnosticsRoute
+  '/ltk': typeof LtkRoute
   '/settings': typeof SettingsRoute
+  '/skins': typeof SkinsRoute
   '/workshop': typeof WorkshopRouteWithChildren
   '/folder/$folderId': typeof FolderFolderIdRoute
   '/workshop/$projectName': typeof WorkshopProjectNameRoute
@@ -65,7 +79,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/diagnostics': typeof DiagnosticsRoute
+  '/ltk': typeof LtkRoute
   '/settings': typeof SettingsRoute
+  '/skins': typeof SkinsRoute
   '/folder/$folderId': typeof FolderFolderIdRoute
   '/workshop/$projectName': typeof WorkshopProjectNameRoute
   '/workshop': typeof WorkshopIndexRoute
@@ -74,7 +90,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/diagnostics': typeof DiagnosticsRoute
+  '/ltk': typeof LtkRoute
   '/settings': typeof SettingsRoute
+  '/skins': typeof SkinsRoute
   '/workshop': typeof WorkshopRouteWithChildren
   '/folder/$folderId': typeof FolderFolderIdRoute
   '/workshop/$projectName': typeof WorkshopProjectNameRoute
@@ -85,7 +103,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/diagnostics'
+    | '/ltk'
     | '/settings'
+    | '/skins'
     | '/workshop'
     | '/folder/$folderId'
     | '/workshop/$projectName'
@@ -94,7 +114,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/diagnostics'
+    | '/ltk'
     | '/settings'
+    | '/skins'
     | '/folder/$folderId'
     | '/workshop/$projectName'
     | '/workshop'
@@ -102,7 +124,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/diagnostics'
+    | '/ltk'
     | '/settings'
+    | '/skins'
     | '/workshop'
     | '/folder/$folderId'
     | '/workshop/$projectName'
@@ -112,7 +136,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DiagnosticsRoute: typeof DiagnosticsRoute
+  LtkRoute: typeof LtkRoute
   SettingsRoute: typeof SettingsRoute
+  SkinsRoute: typeof SkinsRoute
   WorkshopRoute: typeof WorkshopRouteWithChildren
   FolderFolderIdRoute: typeof FolderFolderIdRoute
 }
@@ -126,11 +152,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkshopRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/skins': {
+      id: '/skins'
+      path: '/skins'
+      fullPath: '/skins'
+      preLoaderRoute: typeof SkinsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ltk': {
+      id: '/ltk'
+      path: '/ltk'
+      fullPath: '/ltk'
+      preLoaderRoute: typeof LtkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/diagnostics': {
@@ -188,7 +228,9 @@ const WorkshopRouteWithChildren = WorkshopRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DiagnosticsRoute: DiagnosticsRoute,
+  LtkRoute: LtkRoute,
   SettingsRoute: SettingsRoute,
+  SkinsRoute: SkinsRoute,
   WorkshopRoute: WorkshopRouteWithChildren,
   FolderFolderIdRoute: FolderFolderIdRoute,
 }
