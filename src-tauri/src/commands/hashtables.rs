@@ -14,7 +14,7 @@ use ltk_manager_core::meta_schema::{
     self,
     cache::{MetaSchemaCache, PublishedDb},
 };
-use ltk_manager_core::mods::HealthSweepState;
+use ltk_manager_core::mods::{HealthSweepState, SweepScope};
 use ltk_manager_core::problems::BinNames;
 use ltk_manager_core::strings::StringKeyIndexState;
 use tauri::{AppHandle, Manager};
@@ -160,7 +160,7 @@ fn sweep_after_sync(app: &AppHandle) {
     };
 
     std::thread::spawn(move || {
-        if let Err(e) = library.sweep_mod_health(&settings.config) {
+        if let Err(e) = library.sweep_mod_health(&settings.config, &SweepScope::Due) {
             tracing::warn!("Could not sweep mod health after a hashtable sync: {e}");
         }
     });

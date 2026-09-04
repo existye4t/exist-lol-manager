@@ -15,6 +15,7 @@ const onClose = vi.fn();
 /* The panel inside the dialog is `ModHealthSweepPanel`'s to test, so these mocks
    only have to keep it drawing something. */
 vi.mock("../../api", () => ({
+  useModHealthVerdicts: () => ({ data: {} }),
   useBrokenMods: () => useBrokenMods(),
   useInstalledMods: () => ({ data: [installedMod("a", "Charizard Smolder")] }),
   useRepairMod: () => ({ mutate: vi.fn(), isPending: false }),

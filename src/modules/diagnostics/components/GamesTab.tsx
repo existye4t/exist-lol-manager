@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { AlertBox, Button, EmptyState, Spinner, Tooltip } from "@/components";
+import { errorSummary } from "@/i18n";
 
 import { useIncidents } from "../api";
 import { IncidentDetail } from "./IncidentDetail";
@@ -48,7 +49,7 @@ export function GamesTab() {
     return (
       <div className="mx-auto w-full max-w-5xl p-6">
         <AlertBox variant="error" title="Couldn't read the incidents">
-          {incidents.error.message}
+          {errorSummary(incidents.error)}
         </AlertBox>
       </div>
     );

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type ModHealthVerdict } from "@/lib/tauri";
 import { hasErrorCode } from "@/utils/errors";
 import { unwrapForQuery } from "@/utils/query";
@@ -31,7 +32,7 @@ export function useCheckModHealth() {
         toast.error("Mod no longer exists in the library");
         return;
       }
-      toast.error(error.message ?? "Failed to check mod");
+      toast.error("Failed to check mod", errorSummary(error));
     },
   });
 }

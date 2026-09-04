@@ -53,7 +53,7 @@ export function ImportFantomeDialog() {
             form.reset();
             closeDialog();
           },
-          onError: (err) => console.error("Failed to import fantome:", err.message),
+          onError: (err) => console.error("Failed to import fantome:", err),
         },
       );
     },

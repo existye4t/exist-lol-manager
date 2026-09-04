@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
-import type { AppError, GameSearchHit } from "@/lib/tauri";
+import { errorSummary } from "@/i18n";
+import type { GameSearchHit } from "@/lib/tauri";
 import { useSearchGame } from "@/stores";
 
 import { fileKindFromPath, useGameSearch, wadBasename } from "../gameBrowser";
@@ -30,7 +31,7 @@ export function useGameRows(term: string, enabled: boolean): PaletteGroup | null
        path, an install it cannot read, a backend that never answered - looks
        from here like a query that matched nothing, and a group that quietly
        does not appear is the one thing a user cannot debug. */
-    if (error) return group(label, [noticeRow("game:error", message(error))]);
+    if (error) return group(label, [noticeRow("game:error", errorSummary(error))]);
 
     /* Pending rather than absent, so the group draws placeholders while the
        first query of a session pays for the index over every archive. */
@@ -63,10 +64,6 @@ const UNNAMED = "No chunk names yet — sync the hashtables in Settings";
 
 function group(label: string, rows: readonly RankedRow[]): PaletteGroup {
   return { source: "game", label, rows, total: 0 };
-}
-
-function message(error: AppError): string {
-  return error.message || "The game index could not be read";
 }
 
 function toRow(hit: GameSearchHit): RankedRow {

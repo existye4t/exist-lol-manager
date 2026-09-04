@@ -3,7 +3,7 @@
 The next-generation mod manager for League of Legends, built by the [League Toolkit](https://github.com/LeagueToolkit) organization. LTK Manager is the modern successor to [cslol-manager](https://github.com/LeagueToolkit/cslol-manager), rebuilt from the ground up with a Rust backend and a React-based UI.
 
 [![Releases](https://img.shields.io/github/v/release/LeagueToolkit/ltk-manager?style=for-the-badge)](https://github.com/LeagueToolkit/ltk-manager/releases)
-[![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue?style=for-the-badge)](https://github.com/LeagueToolkit/ltk-manager)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](LICENSE)
 [![Windows 10+](https://img.shields.io/badge/Windows-10+-0078D4?style=for-the-badge&logo=windows)](https://www.microsoft.com/windows)
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FLeagueToolkit%2Fltk-manager.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FLeagueToolkit%2Fltk-manager?ref=badge_shield)
 
@@ -60,7 +60,9 @@ The next-generation mod manager for League of Legends, built by the [League Tool
 
 ## ⚖️ License & Reuse
 
-LTK Manager is open-source under a dual **MIT / Apache-2.0** license — you may choose either.
+LTK Manager is open-source under the **GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
+
+Releases up to and including v1.15.2 were dual-licensed MIT / Apache-2.0 and remain available under those terms.
 
 ### LTK Patcher Binaries
 

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "patcher.ALREADY_RUNNING.title": "The patcher is already running",
+  "patcher.BUSY.title": "Stop the patcher before modifying mods",
+  "patcher.INJECTION_FAILED.HOST.title": "Injection Host Failure",
+  "patcher.INJECTION_FAILED.INJECTION.title": "DLL Injection Failure",
+  "patcher.NOT_RUNNING.title": "The patcher is not running",
+  "patcher.UNSUPPORTED_PLATFORM.title": "The patcher is not yet available on this platform",
+  "patcher_error_title": "Patcher Error"
+}

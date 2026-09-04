@@ -628,6 +628,7 @@ samp {
   -webkit-app-region: drag;
 }
 
+[data-tauri-drag-region] [data-no-drag],
 [data-tauri-drag-region] button,
 [data-tauri-drag-region] a,
 [data-tauri-drag-region] input,

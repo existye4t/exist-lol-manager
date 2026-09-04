@@ -145,7 +145,7 @@ describe("useModCardController storage", () => {
     act(() => view.current.onSetStorage("archive"));
 
     const { onError } = setModStorage.mutate.mock.calls[0][1];
-    act(() => onError({ message: "This mod is in a failed state." }));
+    act(() => onError({ code: "VALIDATION_FAILED", detail: "This mod is in a failed state." }));
 
     expect(toast.error).toHaveBeenCalledWith(
       "Could not change how this mod is stored",

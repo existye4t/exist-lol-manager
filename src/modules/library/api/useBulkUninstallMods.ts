@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type InstalledMod } from "@/lib/tauri";
 import { isOk } from "@/utils/result";
 
@@ -29,7 +30,7 @@ export function useBulkUninstallMods() {
         if (isOk(outcome.value)) {
           succeeded.push(id);
         } else {
-          failed.push({ id, error: outcome.value.error.message });
+          failed.push({ id, error: errorSummary(outcome.value.error) });
         }
       });
 

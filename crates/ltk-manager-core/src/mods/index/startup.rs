@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::events::BackendEvent;
 use crate::mods::ModLibrary;
 
-use crate::mods::HealthSweepState;
+use crate::mods::{HealthSweepState, SweepScope};
 
 use super::layout_migration::LayoutMigrationState;
 
@@ -88,7 +88,7 @@ impl ModLibrary {
         }
         self.fill_meta_schema();
 
-        if let Err(e) = self.sweep_mod_health(config) {
+        if let Err(e) = self.sweep_mod_health(config, &SweepScope::Due) {
             tracing::warn!("Failed to sweep mod health on startup: {}", e);
             // Whoever is waiting on an answer has to get one, or it waits for
             // the rest of the session.

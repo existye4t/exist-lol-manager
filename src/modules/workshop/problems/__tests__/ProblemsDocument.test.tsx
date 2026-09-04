@@ -664,7 +664,7 @@ describe("ProblemsDocument", () => {
         ok: false,
         error: {
           code: "IO",
-          message: "X:/mods/smolder-prestige/base is not a directory the manager can read.",
+          detail: "X:/mods/smolder-prestige/base is not a directory the manager can read.",
         },
       });
       renderPanel();

@@ -114,7 +114,7 @@ describe("TokenDecoder", () => {
           ok: false,
           error: {
             code: "UNKNOWN",
-            message: "This token is from a newer LTK Manager, format DIAG2. Update to read it.",
+            detail: "This token is from a newer LTK Manager, format DIAG2. Update to read it.",
           },
         });
       }

@@ -14,13 +14,13 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use ltk_hash::{BinHash, Hash as _};
-use ltk_meta::PropertyValueEnum;
 use ltk_meta::property::Kind;
-use ltk_meta::property::values::Container;
 use serde::Deserialize;
 
 use super::kinds;
+use crate::meta_schema::Shape;
 use crate::problems::GameBuild;
+use crate::problems::walk::Declared;
 
 /// The first table, and the one the deadline names.
 const TABLE_16_17: &str = include_str!("../../tables/binfile_migration_16.17.8087655.jsonl");
@@ -45,7 +45,26 @@ pub enum Conversion {
     /// A `Map` key goes the way [`Rehash`](Self::Rehash) does.
     HashKey,
     /// A type tag or an embedded class hash changes, and no value moves.
+    ///
+    /// Three pairs encode identically and differ only in the tag: `Embed` and
+    /// `Pointer`, `List` and `List2`, `Bool` and `Flag`.
     None,
+    /// Each `None` becomes the null `Pointer`, a zero class hash and nothing
+    /// behind it, which is the one `Pointer` a `None` can mean.
+    NullPointer,
+    /// An integer becomes a wider one holding the same number.
+    ///
+    /// Admitted only for a pair every value of the old type crosses whole,
+    /// which is `Range::fits_in`: a `U8` reaches `U64` and an `I32` does not
+    /// reach `U32`.
+    Widen,
+    /// An option holding nothing is re-declared under the item type the game
+    /// reads.
+    ///
+    /// The wire writes an option's item type and its count apart, so an empty
+    /// option declares a type it holds no value of. There is nothing to cross,
+    /// whatever the two item types are.
+    EmptyOption,
     /// Nothing this build knows turns the value into the type it should be.
     Unknown,
 }
@@ -56,13 +75,91 @@ impl Conversion {
     /// Derived from the pair rather than written per property, since the schema
     /// names a type and not a recipe. A pair with no road between them is
     /// [`Unknown`](Self::Unknown), which reports and offers no repair.
+    ///
+    /// A list, an option or a map crosses on what it holds, and a map keyed
+    /// by `Hash` on its keys, which are the roads the tables take.
     #[must_use]
-    pub fn between(from: Kind, to: Kind) -> Self {
-        match (from, to) {
+    pub fn between(from: &TypeSpec, to: &TypeSpec) -> Self {
+        match (from.kind, to.kind) {
             (Kind::String, Kind::WadChunkLink) => Self::HashValue,
             (Kind::Hash, Kind::WadChunkLink) => Self::Rehash,
+            (Kind::None, Kind::Struct) => Self::NullPointer,
+            /* Three pairs are one encoding under two tags. `Embed` is a
+            `Pointer`'s class hash and body, `List2` is a `List`'s vector, and a
+            `Flag` is a `Bool`'s byte, so each crosses on the tag alone. A
+            container also has to agree on what it holds, since only the tag
+            moves and the items stay as they are. */
+            (Kind::Embedded, Kind::Struct) | (Kind::Struct, Kind::Embedded) => Self::None,
+            (Kind::Bool, Kind::BitBool) | (Kind::BitBool, Kind::Bool) => Self::None,
+            (Kind::Container, Kind::UnorderedContainer)
+            | (Kind::UnorderedContainer, Kind::Container)
+                if to.value.is_none_or(|item| from.value == Some(item)) =>
+            {
+                Self::None
+            }
+            (Kind::Container | Kind::UnorderedContainer | Kind::Optional, same)
+                if same == from.kind =>
+            {
+                Self::held(from.value, to.value)
+            }
+            (Kind::Map, Kind::Map) if from.key == to.key => Self::held(from.value, to.value),
+            (Kind::Map, Kind::Map) if from.value == to.value => match (from.key, to.key) {
+                (Some(Kind::Hash), Some(Kind::WadChunkLink)) => Self::HashKey,
+                _ => Self::Unknown,
+            },
+            (narrow, wide) => Self::widening(narrow, wide),
+        }
+    }
+
+    /// How what a container holds crosses, item by item.
+    fn held(from: Option<Kind>, to: Option<Kind>) -> Self {
+        match (from, to) {
+            (Some(Kind::String), Some(Kind::WadChunkLink)) => Self::HashValue,
+            (Some(Kind::None), Some(Kind::Struct)) => Self::NullPointer,
+            (Some(narrow), Some(wide)) => Self::widening(narrow, wide),
             _ => Self::Unknown,
         }
+    }
+
+    /// The road a wider integer opens, where the pair is one.
+    fn widening(from: Kind, to: Kind) -> Self {
+        match (Range::of(from), Range::of(to)) {
+            (Some(narrow), Some(wide)) if narrow.fits_in(wide) => Self::Widen,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// What an integer kind holds: its width in bits, and whether it carries a sign.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Range {
+    bits: u32,
+    signed: bool,
+}
+
+impl Range {
+    /// The range of an integer kind, or `None` for a kind that is not one.
+    fn of(kind: Kind) -> Option<Self> {
+        let (bits, signed) = match kind {
+            Kind::I8 => (8, true),
+            Kind::U8 => (8, false),
+            Kind::I16 => (16, true),
+            Kind::U16 => (16, false),
+            Kind::I32 => (32, true),
+            Kind::U32 => (32, false),
+            Kind::I64 => (64, true),
+            Kind::U64 => (64, false),
+            _ => return None,
+        };
+        Some(Self { bits, signed })
+    }
+
+    /// Whether every value of this range is a value of `wider`.
+    ///
+    /// A sign costs a bit, so an unsigned type reaches a signed one only by
+    /// growing: `U32` fits in `I64` and not in `I32`.
+    fn fits_in(self, wider: Self) -> bool {
+        wider.bits > self.bits && (wider.signed || !self.signed)
     }
 }
 
@@ -100,65 +197,67 @@ impl TypeSpec {
     /// The type `value` is written as, which is the `from` side of a
     /// schema-derived row.
     #[must_use]
-    pub fn of(value: &PropertyValueEnum) -> Self {
+    pub fn of<'a>(value: impl Declared<'a>) -> Self {
         let mut spec = Self::bare(value.kind());
-        match value {
-            PropertyValueEnum::Container(items) => spec.value = Some(items.item_kind()),
-            PropertyValueEnum::UnorderedContainer(items) => spec.value = Some(items.0.item_kind()),
-            PropertyValueEnum::Optional(optional) => spec.value = Some(optional.item_kind()),
-            PropertyValueEnum::Map(map) => {
-                spec.key = Some(map.key_kind());
-                spec.value = Some(map.value_kind());
-            }
-            _ => {}
-        }
+        spec.key = value.key_kind();
+        spec.value = value.item_kind();
         spec
     }
 
-    /// Whether `value` is declared as this type.
+    /// Whether `value` is declared as this type, over either tree.
     ///
     /// Detection reads the value's own kind rather than a version, so a table
     /// whose `from` no longer matches contributes nothing and costs one lookup.
-    #[must_use]
-    pub fn matches(&self, value: &PropertyValueEnum) -> bool {
+    ///
+    /// # Errors
+    ///
+    /// Over a view, a header that does not decode. The owned tree never fails.
+    pub fn matches<'a>(&self, value: impl Declared<'a>) -> Result<bool, ltk_meta::Error> {
         if value.kind() != self.kind {
-            return false;
+            return Ok(false);
         }
-        match value {
-            PropertyValueEnum::Container(items) => self.matches_items(items),
-            PropertyValueEnum::UnorderedContainer(items) => self.matches_items(&items.0),
-            PropertyValueEnum::Optional(optional) => {
-                self.value.is_none_or(|item| optional.item_kind() == item)
+        Ok(match value.kind() {
+            Kind::Container | Kind::UnorderedContainer => self.matches_items(value)?,
+            Kind::Optional => self
+                .value
+                .is_none_or(|item| value.item_kind() == Some(item)),
+            Kind::Map => {
+                self.key.is_none_or(|key| value.key_kind() == Some(key))
+                    && self
+                        .value
+                        .is_none_or(|item| value.item_kind() == Some(item))
             }
-            PropertyValueEnum::Map(map) => {
-                self.key.is_none_or(|key| map.key_kind() == key)
-                    && self.value.is_none_or(|value| map.value_kind() == value)
-            }
-            PropertyValueEnum::Struct(object) => self.matches_class(object.class_hash),
-            PropertyValueEnum::Embedded(object) => self.matches_class(object.0.class_hash),
+            Kind::Struct | Kind::Embedded => value
+                .class_hash()
+                .is_some_and(|class| self.matches_class(class)),
             _ => true,
-        }
+        })
     }
 
     /// Whether a container holds the item type, and the class, this names.
     ///
     /// An empty container matches, because a container holding nothing holds
     /// nothing of the wrong class.
-    fn matches_items(&self, container: &Container) -> bool {
-        if self.value.is_some_and(|item| container.item_kind() != item) {
-            return false;
+    fn matches_items<'a>(&self, container: impl Declared<'a>) -> Result<bool, ltk_meta::Error> {
+        if self
+            .value
+            .is_some_and(|item| container.item_kind() != Some(item))
+        {
+            return Ok(false);
         }
         let Some(class) = self.class else {
-            return true;
+            return Ok(true);
         };
-        if !matches!(container.item_kind(), Kind::Struct | Kind::Embedded) {
-            return false;
+        if !matches!(container.item_kind(), Some(Kind::Struct | Kind::Embedded)) {
+            return Ok(false);
         }
-        container.items().iter().all(|item| match item {
-            PropertyValueEnum::Embedded(it) => it.0.class_hash == class,
-            PropertyValueEnum::Struct(it) => it.class_hash == class,
-            _ => false,
-        })
+        for held in container.children()? {
+            let (_, item) = held?;
+            if item.class_hash() != Some(class) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn matches_class(&self, class: BinHash) -> bool {
@@ -173,6 +272,19 @@ impl TypeSpec {
             (Some(key), Some(value)) => format!("{kind}<{}, {}>", word(key), word(value)),
             (None, Some(value)) => format!("{kind}<{}>", word(value)),
             _ => kind,
+        }
+    }
+}
+
+impl From<Shape> for TypeSpec {
+    /// The type the schema holds, which names no class and no size.
+    fn from(shape: Shape) -> Self {
+        Self {
+            kind: shape.kind,
+            key: shape.key,
+            value: shape.value,
+            class: None,
+            size: None,
         }
     }
 }
@@ -348,6 +460,8 @@ enum RowConversion {
     Rehash,
     HashKey,
     None,
+    Widen,
+    EmptyOption,
 }
 
 impl From<RowConversion> for Conversion {
@@ -357,6 +471,8 @@ impl From<RowConversion> for Conversion {
             RowConversion::Rehash => Self::Rehash,
             RowConversion::HashKey => Self::HashKey,
             RowConversion::None => Self::None,
+            RowConversion::Widen => Self::Widen,
+            RowConversion::EmptyOption => Self::EmptyOption,
         }
     }
 }
@@ -396,6 +512,8 @@ mod tests {
     use ltk_meta::property::values;
 
     use super::*;
+    use ltk_meta::PropertyValueEnum;
+    use ltk_meta::property::values::Container;
 
     fn shipped() -> &'static MigrationTable {
         &tables()[0]
@@ -565,14 +683,14 @@ mod tests {
         let path = string("ASSETS/Characters/Smolder/HUD/Smolder_Circle.dds");
         let hashed = file(0xabe0_3fa5_cfa7_e5c0);
 
-        assert!(migration.from.matches(&path));
-        assert!(!migration.from.matches(&hashed));
-        assert!(migration.to.matches(&hashed));
-        assert!(!migration.to.matches(&path));
+        assert!(migration.from.matches(&path).unwrap());
+        assert!(!migration.from.matches(&hashed).unwrap());
+        assert!(migration.to.matches(&hashed).unwrap());
+        assert!(!migration.to.matches(&path).unwrap());
 
-        let neither = PropertyValueEnum::Hash(values::Hash::new(1u32));
-        assert!(!migration.from.matches(&neither));
-        assert!(!migration.to.matches(&neither));
+        let neither: PropertyValueEnum = PropertyValueEnum::Hash(values::Hash::new(1u32));
+        assert!(!migration.from.matches(&neither).unwrap());
+        assert!(!migration.to.matches(&neither).unwrap());
     }
 
     #[test]
@@ -588,20 +706,20 @@ mod tests {
                 string("a"),
             )
             .expect("a key and a value of the map's kinds");
-        let hashed = PropertyValueEnum::Map(hashed);
-        assert!(migration.from.matches(&hashed));
-        assert!(!migration.to.matches(&hashed));
+        let hashed: PropertyValueEnum = PropertyValueEnum::Map(hashed);
+        assert!(migration.from.matches(&hashed).unwrap());
+        assert!(!migration.to.matches(&hashed).unwrap());
 
-        let linked = PropertyValueEnum::Map(
+        let linked: PropertyValueEnum = PropertyValueEnum::Map(
             values::Map::empty(Kind::WadChunkLink, Kind::String).expect("kinds a map can hold"),
         );
-        assert!(migration.to.matches(&linked));
-        assert!(!migration.from.matches(&linked));
+        assert!(migration.to.matches(&linked).unwrap());
+        assert!(!migration.from.matches(&linked).unwrap());
 
-        let wrong_value = PropertyValueEnum::Map(
+        let wrong_value: PropertyValueEnum = PropertyValueEnum::Map(
             values::Map::empty(Kind::Hash, Kind::I32).expect("kinds a map can hold"),
         );
-        assert!(!migration.from.matches(&wrong_value));
+        assert!(!migration.from.matches(&wrong_value).unwrap());
     }
 
     /// An empty `Optional` still carries its variant, so the item kind reads
@@ -610,22 +728,22 @@ mod tests {
     fn an_optional_matches_on_its_item_kind_whether_or_not_it_holds_one() {
         let migration = row("SkinCharacterDataProperties", "iconCircle");
 
-        let empty = PropertyValueEnum::Optional(
+        let empty: PropertyValueEnum = PropertyValueEnum::Optional(
             values::Optional::empty(Kind::String).expect("a kind an optional can hold"),
         );
-        assert!(migration.from.matches(&empty));
-        assert!(!migration.to.matches(&empty));
+        assert!(migration.from.matches(&empty).unwrap());
+        assert!(!migration.to.matches(&empty).unwrap());
 
-        let held = PropertyValueEnum::Optional(
+        let held: PropertyValueEnum = PropertyValueEnum::Optional(
             values::Optional::new(Kind::String, Some(string("ASSETS/x.dds"))).expect("a string"),
         );
-        assert!(migration.from.matches(&held));
+        assert!(migration.from.matches(&held).unwrap());
 
-        let linked = PropertyValueEnum::Optional(
+        let linked: PropertyValueEnum = PropertyValueEnum::Optional(
             values::Optional::empty(Kind::WadChunkLink).expect("a kind an optional can hold"),
         );
-        assert!(migration.to.matches(&linked));
-        assert!(!migration.from.matches(&linked));
+        assert!(migration.to.matches(&linked).unwrap());
+        assert!(!migration.from.matches(&linked).unwrap());
     }
 
     #[test]
@@ -637,18 +755,18 @@ mod tests {
             Kind::String,
             vec![string("ASSETS/a.dds"), string("ASSETS/b.dds")],
         )));
-        assert!(migration.from.matches(&paths));
-        assert!(!migration.to.matches(&paths));
+        assert!(migration.from.matches(&paths).unwrap());
+        assert!(!migration.to.matches(&paths).unwrap());
 
         let links = PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container(
             Kind::WadChunkLink,
             vec![file(1)],
         )));
-        assert!(migration.to.matches(&links));
+        assert!(migration.to.matches(&links).unwrap());
 
         // An ordered container is a different tag, so it is neither shape.
         let ordered = PropertyValueEnum::Container(container(Kind::String, vec![string("a")]));
-        assert!(!migration.from.matches(&ordered));
+        assert!(!migration.from.matches(&ordered).unwrap());
     }
 
     #[test]
@@ -660,21 +778,21 @@ mod tests {
             Kind::Embedded,
             vec![embedded(0x0a7c_a72c), embedded(0x0a7c_a72c)],
         )));
-        assert!(migration.from.matches(&old));
-        assert!(!migration.to.matches(&old));
+        assert!(migration.from.matches(&old).unwrap());
+        assert!(!migration.to.matches(&old).unwrap());
 
         let renamed = PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container(
             Kind::Embedded,
             vec![embedded(0x3b8d_8b3f)],
         )));
-        assert!(migration.to.matches(&renamed));
+        assert!(migration.to.matches(&renamed).unwrap());
 
         let empty = PropertyValueEnum::UnorderedContainer(values::UnorderedContainer(container(
             Kind::Embedded,
             vec![],
         )));
-        assert!(migration.from.matches(&empty));
-        assert!(migration.to.matches(&empty));
+        assert!(migration.from.matches(&empty).unwrap());
+        assert!(migration.to.matches(&empty).unwrap());
     }
 
     #[test]
@@ -682,15 +800,15 @@ mod tests {
         let migration = row("0x3b09052f", "value");
         assert_eq!(migration.conversion, Conversion::None);
 
-        assert!(migration.from.matches(&embedded(0x73b4_a2eb)));
-        assert!(!migration.from.matches(&embedded(0x0a7c_a72c)));
+        assert!(migration.from.matches(&embedded(0x73b4_a2eb)).unwrap());
+        assert!(!migration.from.matches(&embedded(0x0a7c_a72c)).unwrap());
 
-        let pointer = PropertyValueEnum::Struct(values::Struct {
+        let pointer: PropertyValueEnum = PropertyValueEnum::Struct(values::Struct {
             class_hash: BinHash(0x73b4_a2eb),
             ..Default::default()
         });
-        assert!(migration.to.matches(&pointer));
-        assert!(!migration.from.matches(&pointer));
+        assert!(migration.to.matches(&pointer).unwrap());
+        assert!(!migration.from.matches(&pointer).unwrap());
     }
 
     #[test]
@@ -752,5 +870,156 @@ not json at all
         let table = MigrationTable::parse(GameBuild::new(1, 2, 3), "\n\n   \n");
         assert!(table.is_empty());
         assert_eq!(table.len(), 0);
+    }
+
+    /// A `None` where the game wants a `Pointer` is a pointer to nothing,
+    /// which the format writes as a zero class hash, so that is the road.
+    #[test]
+    fn a_none_crosses_to_a_pointer_as_a_null_pointer() {
+        assert_eq!(
+            Conversion::between(&TypeSpec::bare(Kind::None), &TypeSpec::bare(Kind::Struct)),
+            Conversion::NullPointer
+        );
+
+        let list_of = |item| TypeSpec {
+            value: Some(item),
+            ..TypeSpec::bare(Kind::Container)
+        };
+        assert_eq!(
+            Conversion::between(&list_of(Kind::None), &list_of(Kind::Struct)),
+            Conversion::NullPointer
+        );
+    }
+
+    /// Every value of the narrow type is a value of the wide one, so the number
+    /// crosses whole and the tag is the only thing that moves.
+    #[test]
+    fn an_integer_crosses_to_any_type_that_holds_every_value_it_had() {
+        let crossings = [
+            (Kind::U8, Kind::U16),
+            (Kind::U8, Kind::U64),
+            (Kind::U16, Kind::U32),
+            (Kind::U32, Kind::U64),
+            (Kind::I8, Kind::I64),
+            (Kind::I16, Kind::I32),
+            (Kind::I32, Kind::I64),
+            /* A sign costs a bit, so an unsigned type reaches a signed one
+            only by growing. */
+            (Kind::U8, Kind::I16),
+            (Kind::U32, Kind::I64),
+        ];
+        for (from, to) in crossings {
+            assert_eq!(
+                Conversion::between(&TypeSpec::bare(from), &TypeSpec::bare(to)),
+                Conversion::Widen,
+                "{from:?} to {to:?}"
+            );
+        }
+    }
+
+    /// A pair that could drop a bit of the number is not a repair, whatever the
+    /// two widths are.
+    #[test]
+    fn an_integer_does_not_cross_to_a_type_that_would_lose_it() {
+        let refused = [
+            (Kind::U32, Kind::U8),
+            (Kind::I64, Kind::I32),
+            (Kind::U32, Kind::I32),
+            (Kind::I32, Kind::U32),
+            (Kind::I8, Kind::U64),
+            (Kind::U8, Kind::U8),
+            (Kind::U32, Kind::F32),
+        ];
+        for (from, to) in refused {
+            assert_eq!(
+                Conversion::between(&TypeSpec::bare(from), &TypeSpec::bare(to)),
+                Conversion::Unknown,
+                "{from:?} to {to:?}"
+            );
+        }
+    }
+
+    /// A container crosses on what it holds, so a list of narrow integers takes
+    /// the same road one of them does.
+    #[test]
+    fn a_container_of_integers_crosses_on_its_item_type() {
+        let list_of = |item| TypeSpec {
+            value: Some(item),
+            ..TypeSpec::bare(Kind::Container)
+        };
+        assert_eq!(
+            Conversion::between(&list_of(Kind::U8), &list_of(Kind::U32)),
+            Conversion::Widen
+        );
+        assert_eq!(
+            Conversion::between(&list_of(Kind::U32), &list_of(Kind::U8)),
+            Conversion::Unknown
+        );
+    }
+
+    /// Three pairs are one encoding under two tags, and Riot has moved fields
+    /// both ways across each, so every direction is a retype and no move.
+    #[test]
+    fn the_pairs_that_share_an_encoding_cross_on_the_tag_either_way() {
+        let pairs = [
+            (Kind::Embedded, Kind::Struct),
+            (Kind::Struct, Kind::Embedded),
+            (Kind::Bool, Kind::BitBool),
+            (Kind::BitBool, Kind::Bool),
+        ];
+        for (from, to) in pairs {
+            assert_eq!(
+                Conversion::between(&TypeSpec::bare(from), &TypeSpec::bare(to)),
+                Conversion::None,
+                "{from:?} to {to:?}"
+            );
+        }
+    }
+
+    /// A `List` and a `List2` are the same vector, so the ordering tag crosses
+    /// on its own - but only where both sides hold the same item type, because
+    /// nothing under the tag moves.
+    #[test]
+    fn a_list_and_a_list2_cross_where_they_hold_the_same_item() {
+        let list_of = |kind, item| TypeSpec {
+            value: Some(item),
+            ..TypeSpec::bare(kind)
+        };
+        assert_eq!(
+            Conversion::between(
+                &list_of(Kind::Container, Kind::Hash),
+                &list_of(Kind::UnorderedContainer, Kind::Hash)
+            ),
+            Conversion::None
+        );
+        assert_eq!(
+            Conversion::between(
+                &list_of(Kind::UnorderedContainer, Kind::Struct),
+                &list_of(Kind::Container, Kind::Struct)
+            ),
+            Conversion::None
+        );
+        assert_eq!(
+            Conversion::between(
+                &list_of(Kind::Container, Kind::String),
+                &list_of(Kind::UnorderedContainer, Kind::WadChunkLink)
+            ),
+            Conversion::Unknown,
+            "the items would have to cross as well, and one road cannot do both"
+        );
+    }
+
+    /// A schema that names no item type is a claim about the ordering alone,
+    /// which is the same claim `TypeSpec::matches` reads it as.
+    #[test]
+    fn a_list_crosses_where_the_other_side_names_no_item() {
+        let list = TypeSpec {
+            value: Some(Kind::Hash),
+            ..TypeSpec::bare(Kind::Container)
+        };
+        assert_eq!(
+            Conversion::between(&list, &TypeSpec::bare(Kind::UnorderedContainer)),
+            Conversion::None
+        );
     }
 }

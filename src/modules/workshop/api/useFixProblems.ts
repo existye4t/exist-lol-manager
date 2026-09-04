@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type FixReport, type ProblemId } from "@/lib/tauri";
 import { unwrapForQuery } from "@/utils/query";
 
@@ -65,7 +66,7 @@ export function useFixProblems() {
       }
     },
     onError: (error) => {
-      toast.error("Couldn't fix problems", error.message);
+      toast.error("Couldn't fix problems", errorSummary(error));
     },
   });
 }

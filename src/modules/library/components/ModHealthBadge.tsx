@@ -1,7 +1,9 @@
 import {
   ArrowsClockwiseIcon,
+  type Icon,
   PlugsIcon,
   WarningCircleIcon,
+  WarningIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
 import { formatDistanceToNow } from "date-fns";
@@ -15,7 +17,7 @@ import {
   useRepairMod,
 } from "@/modules/library";
 
-import { toneOf } from "./modHealthNotice";
+import { alarmOf, type SweepAlarm, toneOf } from "./modHealthNotice";
 
 interface ModHealthBadgeProps {
   modId: string;
@@ -25,11 +27,15 @@ interface ModHealthBadgeProps {
  * The header glyph, at twice the size of the pill's.
  *
  * `ModHealthSweepPanel`'s [`PanelMark`] for one mod: the poro for what no repair
- * reaches, and the wrench for what one does. The pill keeps the phosphor glyph
- * either way, since the poro is a drawing and 16px is not enough of it to read.
+ * reaches, and the wrench for what one does. The poro's hue is the rung, so a
+ * mod that still loads gets the same drawing without the alarm. The pill keeps
+ * the phosphor glyph either way, since the poro is a drawing and 16px is not
+ * enough of it to read.
  */
-function PopoverMark({ repairable, tone }: { repairable: boolean; tone: string }) {
-  if (repairable) return <WrenchIcon className={`h-10 w-10 shrink-0 ${tone}`} weight="duotone" />;
+function PopoverMark({ alarm, tone }: { alarm: SweepAlarm; tone: string }) {
+  if (alarm === "repairable") {
+    return <WrenchIcon className={`h-10 w-10 shrink-0 ${tone}`} weight="duotone" />;
+  }
 
   return <ShockedPoroDuotoneIcon className={`h-10 w-10 shrink-0 ${tone}`} />;
 }
@@ -70,15 +76,49 @@ function totalFindings(verdict: ModHealthVerdict): number {
   return fatals + errors + warnings + infos;
 }
 
-function findingsSentence(verdict: ModHealthVerdict): string {
+/** The glyph each rung wears, matching the status bar cell's. */
+const GLYPHS: Record<SweepAlarm, Icon> = {
+  repairable: WrenchIcon,
+  broken: WarningCircleIcon,
+  flagged: WarningIcon,
+};
+
+/**
+ * The headline, which is the verdict in the reader's own terms.
+ *
+ * The two unrepairable rungs say different things because their readers have
+ * different problems: one has to go and find a replacement, and the other has a
+ * mod they should keep and play.
+ */
+const HEADLINES: Record<SweepAlarm, string> = {
+  repairable: "This mod needs a repair",
+  broken: "This mod cannot be repaired",
+  flagged: "This mod loads with a fault",
+};
+
+function findingsSentence(verdict: ModHealthVerdict, alarm: SweepAlarm): string {
   const total = totalFindings(verdict);
   const findings = `finding${total === 1 ? "" : "s"}`;
-  if (verdict.health === "repairable") {
+  if (alarm === "repairable") {
     return verdict.fixable === total
       ? `${total} ${findings}, all repairable automatically.`
       : `${verdict.fixable} of ${total} ${findings} can be repaired automatically.`;
   }
-  return "We found issues with this mod that cannot be repaired, look for a new version.";
+  if (alarm === "broken") {
+    return "We found issues with this mod that cannot be repaired, look for a new version.";
+  }
+  return `${total} ${findings} a repair cannot reach. Nothing here stops the mod loading.`;
+}
+
+function pillLabel(verdict: ModHealthVerdict, alarm: SweepAlarm): string {
+  if (alarm === "repairable") {
+    const { fixable } = verdict;
+    return `${fixable} repairable finding${fixable === 1 ? "" : "s"}, click to repair`;
+  }
+  const total = totalFindings(verdict);
+  const findings = `finding${total === 1 ? "" : "s"}`;
+  if (alarm === "broken") return `${total} unrepairable ${findings}, click for details`;
+  return `${total} ${findings} no repair reaches, click for details`;
 }
 
 /**
@@ -86,9 +126,10 @@ function findingsSentence(verdict: ModHealthVerdict): string {
  * repair behind it.
  *
  * Renders nothing for a healthy or never-checked mod: a badge on every card
- * would bury the few that need one. Repairable is amber and unrepairable is
- * red, and the popover behind either announces the verdict in
- * `ModHealthSweepPanel`'s header language, with the repair and a re-check.
+ * would bury the few that need one. The hue is the rung, per "How loud a
+ * finding is drawn" in docs/ux/MOD_HEALTH.md, and the popover behind the pill
+ * announces the verdict in `ModHealthSweepPanel`'s header language, with the
+ * repair and a re-check.
  */
 export function ModHealthBadge({ modId }: ModHealthBadgeProps) {
   const { data: verdict } = useModHealthVerdict(modId);
@@ -96,21 +137,18 @@ export function ModHealthBadge({ modId }: ModHealthBadgeProps) {
 
   if (!verdict || verdict.health === "healthy") return null;
 
-  const repairable = verdict.health === "repairable";
-  const PillIcon = repairable ? WrenchIcon : WarningCircleIcon;
-  const headline = repairable ? "This mod needs a repair" : "This mod cannot be repaired";
-  const tone = toneOf(repairable ? 1 : 0);
+  const alarm = alarmOf(verdict);
+  const tone = toneOf(alarm);
+  const PillIcon = GLYPHS[alarm];
+  const headline = HEADLINES[alarm];
+  const sentence = findingsSentence(verdict, alarm);
   const tooltipContent = (
     <div className="max-w-[240px] space-y-1">
       <p className="font-semibold text-surface-100">{headline}</p>
-      <p className="text-xs text-surface-200">{findingsSentence(verdict)}</p>
+      <p className="text-xs text-surface-200">{sentence}</p>
       <p className="text-xs text-surface-300">Click for details.</p>
     </div>
   );
-
-  const pillClasses = repairable
-    ? "bg-warning/15 text-warning-text ring-warning/30 hover:bg-warning/25"
-    : "bg-danger/15 text-danger-text ring-danger/30 hover:bg-danger/25";
 
   return (
     <Popover.Root>
@@ -122,12 +160,8 @@ export function ModHealthBadge({ modId }: ModHealthBadgeProps) {
               variant="ghost"
               size="sm"
               icon={<PillIcon className="h-4 w-4" weight="bold" />}
-              aria-label={
-                repairable
-                  ? `${verdict.fixable} repairable finding${verdict.fixable === 1 ? "" : "s"}, click to repair`
-                  : `${totalFindings(verdict)} unrepairable finding${totalFindings(verdict) === 1 ? "" : "s"}, click for details`
-              }
-              className={`h-6 gap-1 rounded py-0.5 text-xs leading-tight font-medium ring-1 ring-inset ${pillClasses}`}
+              aria-label={pillLabel(verdict, alarm)}
+              className={`h-6 gap-1 rounded py-0.5 text-xs leading-tight font-medium ring-1 ring-inset ${tone.pill}`}
             />
           }
         />
@@ -138,10 +172,10 @@ export function ModHealthBadge({ modId }: ModHealthBadgeProps) {
             <div
               className={`relative flex items-start gap-2.5 px-3 py-2.5 select-none ${tone.wash}`}
             >
-              <PopoverMark repairable={repairable} tone={tone.chip} />
+              <PopoverMark alarm={alarm} tone={tone.chip} />
               <div className="min-w-0 flex-1">
                 <Popover.Title className="font-medium">{headline}</Popover.Title>
-                <p className="text-xs text-surface-300">{findingsSentence(verdict)}</p>
+                <p className="text-xs text-surface-300">{sentence}</p>
               </div>
               <RecheckButton modId={modId} repairing={repair.isPending} />
               <span
@@ -153,7 +187,7 @@ export function ModHealthBadge({ modId }: ModHealthBadgeProps) {
               <p className="text-[0.625rem] text-surface-500">
                 Checked {formatDistanceToNow(new Date(verdict.checkedAt), { addSuffix: true })}
               </p>
-              {repairable && (
+              {alarm === "repairable" && (
                 <Button
                   variant="filled"
                   size="xs"

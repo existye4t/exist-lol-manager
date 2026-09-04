@@ -671,8 +671,8 @@ readers the manager has. The [bin editor](BIN_EDITOR.md#the-parse-is-not-the-pro
 exception, and it needs no part of this: one file parses in single-digit milliseconds, so it
 ships on `ltk_meta` as published and takes the lazy read later as an optimisation.
 
-`ltk_meta` is not a dependency of this workspace yet. It is `MIT OR Apache-2.0`, which is the
-workspace's own license, so adding it needs a `pnpm generate:licenses` and nothing else.
+`ltk_meta` is not a dependency of this workspace yet. It is `MIT OR Apache-2.0`, which is
+GPL-compatible, so adding it needs a `pnpm generate:licenses` and nothing else.
 
 ### The build, measured
 

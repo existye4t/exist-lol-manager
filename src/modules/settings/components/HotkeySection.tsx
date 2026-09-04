@@ -2,6 +2,7 @@ import { Keyboard, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button, ButtonGroup, IconButton, SectionCard, Switch, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, isErr, type Settings } from "@/lib/tauri";
 
 import type { IndexedSettingKey } from "../settingsIndex";
@@ -28,7 +29,7 @@ export function HotkeySection({ settings, onSave }: HotkeySectionProps) {
           value={settings.reloadModsHotkey ?? null}
           onSet={async (accelerator) => {
             const result = await api.setHotkey("reloadMods", accelerator);
-            if (isErr(result)) throw new Error(result.error.message);
+            if (isErr(result)) throw new Error(errorSummary(result.error));
             onSave({ ...settings, reloadModsHotkey: accelerator });
           }}
         />
@@ -39,7 +40,7 @@ export function HotkeySection({ settings, onSave }: HotkeySectionProps) {
           value={settings.killLeagueHotkey ?? null}
           onSet={async (accelerator) => {
             const result = await api.setHotkey("killLeague", accelerator);
-            if (isErr(result)) throw new Error(result.error.message);
+            if (isErr(result)) throw new Error(errorSummary(result.error));
             onSave({ ...settings, killLeagueHotkey: accelerator });
           }}
         />

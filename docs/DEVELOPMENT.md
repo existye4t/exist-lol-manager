@@ -68,11 +68,17 @@ pnpm generate:meta-schema    # the embedded meta schema snapshot
 
 `generate:licenses` also runs from the pre-commit hook whenever `Cargo.lock` changes.
 
-`generate:meta-schema` reaches the LTK Meta Wiki API, so it stays out of the hook. It downloads
-nothing when the snapshot already matches what the publisher serves, and it takes `--check` and
-`--force`, both described in the script's own header. The release workflow refreshes the snapshot
-alongside the licenses manifest, because a snapshot older than the installed game build stands the
-`bin/property-type` check down for the offline user it exists to serve.
+`generate:meta-schema` goes to the network, so it stays out of the hook. It writes nothing when the
+snapshot already matches what the publisher serves, and it takes `--check` and `--force`, both
+described in the script's own header. It reads the database out of the meta wiki's own repository
+rather than from the API that serves the same bytes, because the API sits behind a bot check a CI
+runner cannot pass - see `docs/research/meta-api-reachability-from-ci.md`. The runtime still reads
+the API.
+
+The release workflow refreshes the snapshot alongside the licenses manifest, because a snapshot
+older than the installed game build stands the `bin/property-type` check down for the offline user
+it exists to serve. That user is the one this matters for: the app syncs the schema itself before a
+health sweep, so a machine that has synced is already past whatever the snapshot says.
 
 ## Production Build
 

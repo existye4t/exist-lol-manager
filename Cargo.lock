@@ -2915,7 +2915,7 @@ dependencies = [
 
 [[package]]
 name = "ltk-manager"
-version = "1.15.2"
+version = "1.15.4"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -2924,6 +2924,7 @@ dependencies = [
  "chrono",
  "filetime",
  "flate2",
+ "hex",
  "image",
  "indexmap 2.14.0",
  "ltk-manager-core",
@@ -2965,7 +2966,6 @@ dependencies = [
  "walkdir",
  "windows-sys 0.59.0",
  "zip 2.4.2",
- "zstd",
 ]
 
 [[package]]
@@ -3048,8 +3048,7 @@ dependencies = [
 [[package]]
 name = "ltk_hash"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ada44666d233f89786fdfd6784346a140ddfc7c31d31ac23dfa7b066f9fbe41b"
+source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=0bc9d0ea352b8e28d5aeef3c589bd970ed290e38#0bc9d0ea352b8e28d5aeef3c589bd970ed290e38"
 dependencies = [
  "byteorder",
  "serde",
@@ -3084,8 +3083,7 @@ dependencies = [
 [[package]]
 name = "ltk_io_ext"
 version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "092554284ee9c83dda80408d9370800aa188e5c2da99bee36a3b06c733ced258"
+source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=0bc9d0ea352b8e28d5aeef3c589bd970ed290e38#0bc9d0ea352b8e28d5aeef3c589bd970ed290e38"
 dependencies = [
  "byteorder",
  "glam",
@@ -3096,8 +3094,7 @@ dependencies = [
 [[package]]
 name = "ltk_meta"
 version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "245a8d5c8388c8ced56cfb5fba1d0a8c0bb5e23c36de3d548f01a19b7c2576ef"
+source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=0bc9d0ea352b8e28d5aeef3c589bd970ed290e38#0bc9d0ea352b8e28d5aeef3c589bd970ed290e38"
 dependencies = [
  "byteorder",
  "enum_dispatch",
@@ -3218,8 +3215,7 @@ dependencies = [
 [[package]]
 name = "ltk_primitives"
 version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40c42f3eddcad904acfbdaa7d62efa643e8cad771b27b6a56a24eeabcfc80f94"
+source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=0bc9d0ea352b8e28d5aeef3c589bd970ed290e38#0bc9d0ea352b8e28d5aeef3c589bd970ed290e38"
 dependencies = [
  "byteorder",
  "glam",
@@ -3241,9 +3237,9 @@ dependencies = [
 
 [[package]]
 name = "ltk_texture"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "115b49ea9df43675de6aac35176ff8da0adcc0d86d2522ca357b93636d78d4c8"
+checksum = "004d28b0ab0ebb3009b2c907766f94c823e56d2497613bed57d2395092d6c6a8"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",

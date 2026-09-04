@@ -3,6 +3,7 @@ import { Check, TriangleAlert, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import { Button, Dialog, Progress } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api } from "@/lib/tauri";
 import { useWorkshopDialogsStore, useWorkshopSelectionStore } from "@/stores";
 
@@ -56,7 +57,7 @@ export function BulkDeleteDialog() {
         ? { displayName: projects[i].displayName, outcome: { ok: true } }
         : {
             displayName: projects[i].displayName,
-            outcome: { ok: false, error: result.error.message },
+            outcome: { ok: false, error: errorSummary(result.error) },
           };
 
       accumulated.push(item);

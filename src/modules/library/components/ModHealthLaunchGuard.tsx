@@ -6,6 +6,7 @@ import { Button, Popover } from "@/components";
 import { useModHealthDrawerStore } from "@/stores";
 
 import { useBrokenEnabledMods } from "../api";
+import { alarmOf } from "./modHealthNotice";
 
 /** Starts a launch, or holds it until the reader has answered for what it carries. */
 export type GuardedLaunch = (launch: () => void) => void;
@@ -16,7 +17,7 @@ interface ModHealthLaunchGuardProps {
 }
 
 /**
- * Asks before a patch carries mods a health check found broken.
+ * Asks before a patch carries mods the game will refuse or mis-load.
  *
  * Per "Launching with something broken" in docs/ux/MOD_HEALTH.md. Every way into
  * a launch takes the same wrapper, so the split menu cannot become the route
@@ -35,10 +36,15 @@ export function ModHealthLaunchGuard({ children }: ModHealthLaunchGuardProps) {
   const anchor = useRef<HTMLDivElement>(null);
   const [held, setHeld] = useState<(() => void) | null>(null);
 
-  const repairable = broken.filter((verdict) => verdict.health === "repairable").length;
+  /* Only what the game pays for holds a launch up. A mod that loads and plays
+     is not a press to interrupt, and an ask over one teaches the reader to press
+     through the ask that matters - the same reason a disabled mod does not ask.
+     Per "Only what the game pays for asks" in docs/ux/MOD_HEALTH.md. */
+  const asked = broken.filter((verdict) => alarmOf(verdict) !== "flagged");
+  const repairable = asked.filter((verdict) => verdict.health === "repairable").length;
 
   const ask: GuardedLaunch = (launch) => {
-    if (broken.length === 0) {
+    if (asked.length === 0) {
       launch();
       return;
     }
@@ -73,7 +79,7 @@ export function ModHealthLaunchGuard({ children }: ModHealthLaunchGuardProps) {
         <Popover.Portal>
           <Popover.Positioner anchor={anchor} side="bottom" align="end" sideOffset={8}>
             <Popover.Popup className="w-80 p-3">
-              <Popover.Title>Launch with {count(broken.length)}?</Popover.Title>
+              <Popover.Title>Launch with {count(asked.length)}?</Popover.Title>
               <Popover.Description className="mt-1 text-xs">
                 <Consequence repairable={repairable} />
               </Popover.Description>

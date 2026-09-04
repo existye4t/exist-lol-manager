@@ -3,7 +3,7 @@ name = "ltk-manager-core"
 version = "0.1.0"
 description = "UI-agnostic core library for LTK Manager"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/LeagueToolkit/ltk-manager"
 
 [features]

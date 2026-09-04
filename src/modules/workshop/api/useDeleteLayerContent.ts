@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError } from "@/lib/tauri";
 import { unwrapForQuery } from "@/utils/query";
 
@@ -36,7 +37,7 @@ export function useDeleteLayerContent() {
       toast.success(`Deleted ${name}`);
     },
     onError: (error) => {
-      toast.error("Couldn't delete", error.message);
+      toast.error("Couldn't delete", errorSummary(error));
     },
   });
 }

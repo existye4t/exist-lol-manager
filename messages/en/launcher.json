@@ -1,0 +1,16 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "launcher.MISCONFIGURED.title": "The launcher is misconfigured",
+  "launcher.REFUSED.eula_not_accepted.description": "Open the Riot Client and accept the Terms of Service, then press Play again. The Riot Client won't start League until you have.",
+  "launcher.REFUSED.eula_not_accepted.title": "Riot's Terms of Service need accepting",
+  "launcher.REFUSED.title": "The Riot Client refused to launch League",
+  "launcher.RIOT_CLIENT_NOT_FOUND.description": "Check that your League installation path is set correctly in Settings - the manager reads it to work out which Riot Client owns your install.",
+  "launcher.RIOT_CLIENT_NOT_FOUND.title": "Can't find your Riot Client",
+  "launcher.RIOT_CLIENT_UNREACHABLE.description": "It's running but didn't accept the launch request. Bring it up manually and try again.",
+  "launcher.RIOT_CLIENT_UNREACHABLE.title": "Couldn't reach the Riot Client",
+  "launcher.SPAWN_FAILED.description": "Windows would not start it. An antivirus holding the executable, or a Riot Client that has been moved or removed, are the usual reasons - open it yourself to check.",
+  "launcher.SPAWN_FAILED.title": "Couldn't start the Riot Client",
+  "launcher.UNSUPPORTED_PLATFORM.description": "The manager can only launch League on Windows. Start it from the Riot Client.",
+  "launcher.UNSUPPORTED_PLATFORM.title": "Launching isn't supported here",
+  "launcher_launch_failed_title": "Couldn't launch League"
+}

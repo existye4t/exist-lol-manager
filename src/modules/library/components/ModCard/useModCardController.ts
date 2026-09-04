@@ -2,6 +2,7 @@ import { useState } from "react";
 import { match } from "ts-pattern";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type InstalledMod, type ModStorage } from "@/lib/tauri";
 import {
   useMoveModToFolder,
@@ -125,13 +126,13 @@ export function useModCardController({
   function handleToggle(modId: string, enabled: boolean) {
     toggleMod.mutate(
       { modId, enabled },
-      { onError: (error) => console.error("Failed to toggle mod:", error.message) },
+      { onError: (error) => console.error("Failed to toggle mod:", error) },
     );
   }
 
   function handleUninstall() {
     uninstallMod.mutate(mod.id, {
-      onError: (error) => console.error("Failed to uninstall mod:", error.message),
+      onError: (error) => console.error("Failed to uninstall mod:", error),
     });
   }
 
@@ -142,7 +143,8 @@ export function useModCardController({
     setModStorage.mutate(
       { modId: mod.id, storage },
       {
-        onError: (error) => toast.error("Could not change how this mod is stored", error.message),
+        onError: (error) =>
+          toast.error("Could not change how this mod is stored", errorSummary(error)),
       },
     );
   }

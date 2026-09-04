@@ -18,6 +18,7 @@ import { twMerge } from "tailwind-merge";
 
 import { Button, EmptyState, IconButton, Spinner, Tooltip } from "@/components";
 import { useReducedMotion, useResizeObserver } from "@/hooks";
+import { errorSummary } from "@/i18n";
 import type { AppError, AssetInfo, AssetRef } from "@/lib/tauri";
 import { usePreviewCheckered, useSetPreviewCheckered } from "@/stores";
 import { formatBytes } from "@/utils";
@@ -468,7 +469,7 @@ function PreviewUnavailable({ asset, name, info, error }: PreviewUnavailableProp
       size="sm"
       className="h-full"
       title="Could not read this file"
-      description={error?.message ?? `${name} did not decode as an image.`}
+      description={error ? errorSummary(error) : `${name} did not decode as an image.`}
     />
   );
 }

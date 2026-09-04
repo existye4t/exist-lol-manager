@@ -1,13 +1,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import svgr from "vite-plugin-svgr";
 import { defineConfig } from "vitest/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [svgr()],
+  plugins: [paraglideVitePlugin({ project: "./project.inlang" }), svgr()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

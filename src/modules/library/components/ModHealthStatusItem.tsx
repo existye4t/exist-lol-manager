@@ -1,10 +1,10 @@
-import { WarningCircleIcon, WrenchIcon } from "@phosphor-icons/react";
+import { type Icon, WarningCircleIcon, WarningIcon, WrenchIcon } from "@phosphor-icons/react";
 
 import { Button, Tooltip } from "@/components";
 import { useModHealthDrawerStore } from "@/stores";
 
 import { useModHealthStatus } from "../api";
-import { toneOf } from "./modHealthNotice";
+import { alarmOver, type SweepAlarm, toneOf } from "./modHealthNotice";
 
 /**
  * What the library's mod health amounts to, as a cell in the status bar.
@@ -24,9 +24,12 @@ export function ModHealthStatusItem() {
   // cell would be a press that does nothing.
   if (!status || !hosted) return null;
 
-  const repairable = status.repairable.length;
-  const tone = toneOf(repairable);
-  const ItemIcon = repairable > 0 ? WrenchIcon : WarningCircleIcon;
+  const alarm = alarmOver(status.all);
+  const tone = toneOf(alarm);
+  const ItemIcon = GLYPHS[alarm];
+  /* Only the repairable rung counts a subset: the other two are reached only
+     when no repair is on offer, so every broken mod is one of theirs. */
+  const count = alarm === "repairable" ? status.repairable.length : status.all.length;
 
   function toggle() {
     if (shown) {
@@ -37,7 +40,7 @@ export function ModHealthStatusItem() {
   }
 
   return (
-    <Tooltip content={hint(shown)}>
+    <Tooltip content={hint(alarm, shown)}>
       <Button
         variant="duotone"
         size="sm"
@@ -48,20 +51,43 @@ export function ModHealthStatusItem() {
         className={`mr-1.5 h-6 shrink-0 gap-1 self-center rounded-sm px-2 text-row tabular-nums ${tone.cell} ${shown ? tone.held : ""}`}
       >
         <ItemIcon className="h-4 w-4 shrink-0" weight="bold" />
-        {label(repairable, status.unrepairable.length)}
+        {label(alarm, count)}
       </Button>
     </Tooltip>
   );
 }
 
+/**
+ * The glyph each rung is found by, so the cell is told apart by shape as well
+ * as by hue. The triangle is the one the severity tally already spends on a
+ * warning.
+ */
+const GLYPHS: Record<SweepAlarm, Icon> = {
+  repairable: WrenchIcon,
+  broken: WarningCircleIcon,
+  flagged: WarningIcon,
+};
+
 /** What the press will do, since the cell's own words only ever say the count. */
-function hint(shown: boolean): string {
-  if (shown) return "Hide the mods that need attention.";
-  return "Some of your mods require attention. Open the list and repair them.";
+function hint(alarm: SweepAlarm, shown: boolean): string {
+  if (shown) return "Hide the mods this found something in.";
+  return HINTS[alarm];
 }
 
-/** The cell's own words, which have room for a count and little else. */
-function label(repairable: number, unrepairable: number): string {
-  if (repairable === 0) return `${unrepairable} broken`;
-  return `${repairable} ${repairable === 1 ? "repair" : "repairs"}`;
+const HINTS: Record<SweepAlarm, string> = {
+  repairable: "Some of your mods require attention. Open the list and repair them.",
+  broken: "Some of your mods are broken and no repair reaches them. Open the list.",
+  flagged: "Some of your mods load with something that will not behave. Open the list.",
+};
+
+/**
+ * The cell's own words, which have room for a count and little else.
+ *
+ * `broken` is spent only where the game is what pays for it. A mod that loads
+ * and plays is `flagged`, because calling that broken is what sent readers
+ * looking for a replacement they did not need.
+ */
+function label(alarm: SweepAlarm, count: number): string {
+  if (alarm === "repairable") return `${count} ${count === 1 ? "repair" : "repairs"}`;
+  return `${count} ${alarm}`;
 }

@@ -28,6 +28,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 
 import { IconButton, Menu, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type LayerContent, type WorkshopLayer, type WorkshopProject } from "@/lib/tauri";
 import { useShowLayerStats } from "@/stores";
 import { formatBytes, restrictToVerticalAxis } from "@/utils";
@@ -86,7 +87,7 @@ export function ContentLayerList({
           invalidateContent();
           if (deletingSelected) onSelect("base");
         },
-        onError: (err) => toast.error(`Failed to delete layer: ${err.message}`),
+        onError: (err) => toast.error(`Failed to delete layer: ${errorSummary(err)}`),
       },
     );
   }
@@ -96,7 +97,7 @@ export function ContentLayerList({
       { projectPath: project.path, layerNames: newOrder },
       {
         onSuccess: () => invalidateContent(),
-        onError: (err) => toast.error(`Failed to reorder: ${err.message}`),
+        onError: (err) => toast.error(`Failed to reorder: ${errorSummary(err)}`),
       },
     );
   }
@@ -338,7 +339,7 @@ function RowShell({
       { projectPath, layerName: layer.name, newDisplayName: trimmed },
       {
         onSuccess: () => onRenamed(),
-        onError: (err) => toast.error(`Failed to rename: ${err.message}`),
+        onError: (err) => toast.error(`Failed to rename: ${errorSummary(err)}`),
         onSettled: () => setIsRenaming(false),
       },
     );

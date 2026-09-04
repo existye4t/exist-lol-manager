@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 
-import { useLibrarySelectionStore, useModHealthDrawerStore } from "@/stores";
+import { ShockedPoroDuotoneIcon, useToast } from "@/components";
+import { useModHealthDrawerStore, useQueuedDialog } from "@/stores";
 
 import { useModHealthStatus } from "../api";
+import { alarmOver, announcementKey, HEADLINE, toneOf } from "./modHealthNotice";
 import { ModHealthSweepDialog } from "./ModHealthSweepDialog";
 
 /**
@@ -12,35 +14,53 @@ import { ModHealthSweepDialog } from "./ModHealthSweepDialog";
  * it is a status bar cell in the app shell, so the two meet at
  * `useModHealthDrawerStore` rather than through the page between them.
  *
- * The unprompted open is raised here rather than from that cell, because here is
- * the only place that knows the drawer would be seen.
+ * The unprompted announcement is raised here rather than from that cell, because
+ * here is the only place that knows the drawer would be seen.
  */
 export function ModHealthSweep() {
   const status = useModHealthStatus();
   const open = useModHealthDrawerStore((s) => s.open);
-  const announce = useModHealthDrawerStore((s) => s.announce);
+  const openDrawer = useModHealthDrawerStore((s) => s.openDrawer);
+  const takeAnnouncement = useModHealthDrawerStore((s) => s.takeAnnouncement);
+  const announced = useModHealthDrawerStore((s) => s.announced);
   const close = useModHealthDrawerStore((s) => s.close);
-  const selectMode = useLibrarySelectionStore((s) => s.selectMode);
+  const focusModId = useModHealthDrawerStore((s) => s.focusModId);
   const setHosted = useModHealthDrawerStore((s) => s.setHosted);
-
-  // Select mode is one the user is holding open, and a panel over the grid they
-  // are picking from would fight it.
-  const hosting = status !== null && !selectMode;
+  const toast = useToast();
+  const showing = useQueuedDialog("mod-health", open);
 
   useEffect(() => {
-    if (status) announce();
-  }, [status, announce]);
+    if (!status || !takeAnnouncement(announcementKey(status.all))) return;
+
+    if (alarmOver(status.all) === "flagged") {
+      toast.toast({
+        type: "info",
+        title: HEADLINE,
+        description: "Some of your mods contain non-fatal issues which are not repairable",
+        /* The drawer's own mark for this rung, so the line the reader is sent
+           from and the panel they land on are the same finding. */
+        icon: <ShockedPoroDuotoneIcon className={`h-5 w-5 ${toneOf("flagged").chip}`} />,
+        timeout: 8000,
+        action: { label: "Show me", onClick: openDrawer },
+      });
+      return;
+    }
+
+    openDrawer();
+    // `announced` so a press that reopens the question is heard: the verdicts
+    // it refreshed can come back identical, and `status` would not move.
+  }, [status, announced, takeAnnouncement, openDrawer, toast]);
 
   // Unconditional: this is where a drawer can be mounted, which is what the
-  // cell needs to know. Whether one is showing right now is `open`, and select
-  // mode withholding it does not make the cell a dead press - it holds the
-  // count either way, and the drawer comes back when the mode ends.
+  // cell needs to know. Whether one is showing right now is `open`.
   useEffect(() => {
     setHosted(true);
     return () => setHosted(false);
   }, [setHosted]);
 
-  if (!hosting) return null;
+  /* A press about one mod is answered even where the library-wide surfaces have
+     nothing to say, which is the whole of what `focusModId` is for. */
+  if (!status && !focusModId) return null;
 
-  return <ModHealthSweepDialog open={open} onClose={close} />;
+  return <ModHealthSweepDialog open={showing} onClose={close} />;
 }

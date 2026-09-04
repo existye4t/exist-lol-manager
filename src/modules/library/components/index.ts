@@ -28,6 +28,7 @@ export * from "./MissingDepsBadge";
 export * from "./ModCard";
 export * from "./ModDetailsDialog";
 export * from "./ModHealthBadge";
+export * from "./ModHealthCheckAction";
 export * from "./ModHealthLaunchGuard";
 export * from "./ModHealthStatusItem";
 export * from "./ModHealthSweep";

@@ -1,9 +1,15 @@
 // @vitest-environment happy-dom
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { HealthCheckReadiness, ModHealth, ModHealthVerdict } from "@/lib/tauri";
+import type {
+  HealthCheckReadiness,
+  ModHealth,
+  ModHealthVerdict,
+  ProblemSeverity,
+} from "@/lib/tauri";
 
 import { ModHealthBadge } from "../ModHealthBadge";
 import { verdict } from "./modHealthFixtures";
@@ -20,8 +26,8 @@ vi.mock("@/modules/library", () => ({
   useRepairMod: () => ({ mutate: repairOne, isPending: false }),
 }));
 
-function show(health: ModHealth) {
-  useModHealthVerdict.mockReturnValue({ data: verdict("a", health) });
+function show(health: ModHealth, severity: ProblemSeverity = "fatal") {
+  useModHealthVerdict.mockReturnValue({ data: verdict("a", health, { severity }) });
   render(<ModHealthBadge modId="a" />);
 }
 
@@ -50,6 +56,21 @@ describe("ModHealthBadge", () => {
     expect(
       screen.getByRole("button", { name: /unrepairable findings, click for details/i }),
     ).toBeInTheDocument();
+  });
+
+  /* Story: the verdict says what a repair can do and the severity says how much
+     it matters, so the two unrepairable rungs are not one pill. A mod that loads
+     is not one to go and replace. */
+  it("does not call a mod broken when nothing stops it loading", async () => {
+    const user = userEvent.setup();
+    show("unrepairable", "warning");
+
+    const pill = screen.getByRole("button", { name: /no repair reaches, click for details/i });
+    await user.click(pill);
+
+    expect(screen.getByText("This mod loads with a fault")).toBeInTheDocument();
+    expect(screen.queryByText("This mod cannot be repaired")).not.toBeInTheDocument();
+    expect(screen.queryByText(/look for a new version/)).not.toBeInTheDocument();
   });
 
   it("counts what a repair reaches on a repairable mod", () => {

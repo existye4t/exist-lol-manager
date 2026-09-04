@@ -22,7 +22,7 @@ export function useProjectActions(project: WorkshopProject | undefined) {
     if (!project) return;
     testMutate(
       { projects: [{ path: project.path, displayName: project.displayName }] },
-      { onError: (err) => console.error("Failed to test project:", err.message) },
+      { onError: (err) => console.error("Failed to test project:", err) },
     );
   }, [project, testMutate]);
 

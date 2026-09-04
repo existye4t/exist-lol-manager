@@ -1,8 +1,10 @@
 import type {
+  Counts,
   HealthSweepState,
   InstalledMod,
   ModHealth,
   ModHealthVerdict,
+  ProblemSeverity,
   RuleBrief,
 } from "@/lib/tauri";
 import type { BrokenMods } from "@/modules/library";
@@ -10,8 +12,15 @@ import type { BrokenMods } from "@/modules/library";
 interface VerdictShape {
   /** Findings a repair would fix. Ignored for a verdict that is not repairable. */
   fixable?: number;
-  /** Live findings behind the verdict, at whatever severity. */
+  /** Live findings behind the verdict. */
   findings?: number;
+  /**
+   * The rung every one of them lands on.
+   *
+   * `fatal` unless a case is about the warning rung, which is where an
+   * unrepairable mod stops being one to replace and becomes one to play.
+   */
+  severity?: ProblemSeverity;
   /** The per-rule fold, `undefined` giving one realistic brief covering every finding. */
   rules?: RuleBrief[];
 }
@@ -19,30 +28,36 @@ interface VerdictShape {
 export function verdict(
   modId: string,
   health: ModHealth,
-  { fixable = 2, findings = 3, rules }: VerdictShape = {},
+  { fixable = 2, findings = 3, severity = "fatal", rules }: VerdictShape = {},
 ): ModHealthVerdict {
   const isFixable = health === "repairable";
+  /* A healthy mod still reports what a rule found, and by "The verdict" in
+     docs/ux/MOD_HEALTH.md those are the informative ones. */
+  const reported = health === "healthy" && severity !== "info" ? 0 : findings;
+  const counts: Counts = { fatals: 0, errors: 0, warnings: 0, infos: 0 };
+  if (reported > 0) counts[RUNG[severity]] = reported;
+
   return {
     modId,
     health,
     fixable: isFixable ? fixable : 0,
-    counts: { fatals: health === "healthy" ? 0 : findings, errors: 0, warnings: 0, infos: 0 },
+    counts,
     rules:
       rules ??
-      (health === "healthy"
+      (reported === 0
         ? []
         : [
             {
               rule: "bin-property-type",
               title: "Outdated bin properties",
               description: "A bin property's type does not match what the game expects",
-              severity: "fatal",
-              count: findings,
+              severity,
+              count: reported,
               fixable: isFixable ? fixable : 0,
               mismatches: [{ expected: "File", found: "Hash" }],
               /* Mirrors the backend: the why-not sentence rides along only
                  when the repair falls short of the count. */
-              ...((isFixable ? fixable : 0) < findings && {
+              ...((isFixable ? fixable : 0) < reported && {
                 unfixable: "Couldn't rehash because source string is unknown",
               }),
             },
@@ -51,6 +66,14 @@ export function verdict(
     basis: { build: "16.17.8087655", manager: "1.14.3" },
   };
 }
+
+/** Which of the four counts a severity is tallied under. */
+const RUNG: Record<ProblemSeverity, keyof Counts> = {
+  fatal: "fatals",
+  error: "errors",
+  warning: "warnings",
+  info: "infos",
+};
 
 export function installedMod(id: string, displayName: string, enabled = true): InstalledMod {
   return {

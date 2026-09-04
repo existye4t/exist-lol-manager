@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Group, Panel } from "react-resizable-panels";
 
 import { Spinner } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { LayerContent, WorkshopProject } from "@/lib/tauri";
 import {
   type DropOutcome,
@@ -169,7 +170,7 @@ export function ContentBrowser({ project }: ContentBrowserProps) {
 
       {error && (
         <div className="m-3 rounded-md border border-danger/30 bg-danger/8 px-3 py-2 text-sm text-danger-text">
-          Couldn&rsquo;t read the content directory: {error.message}
+          Couldn&rsquo;t read the content directory: {errorSummary(error)}
         </div>
       )}
 

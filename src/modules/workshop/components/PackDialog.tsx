@@ -30,7 +30,7 @@ export function PackDialog() {
       { projectPath: project.path, format },
       {
         onSuccess: setPackResult,
-        onError: (err) => console.error("Failed to pack project:", err.message),
+        onError: (err) => console.error("Failed to pack project:", err),
       },
     );
   }

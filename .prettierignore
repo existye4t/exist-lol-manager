@@ -8,6 +8,7 @@ pnpm-lock.yaml
 # Generated files
 src/routeTree.gen.ts
 src/lib/bindings/
+src/paraglide/
 gen/
 public/third-party-licenses.json
 
@@ -22,3 +23,8 @@ src-tauri/
 
 # Spec-kit metadata
 .specify/
+
+# inlang SDK output
+project.inlang/*
+!project.inlang/settings.json
+!project.inlang/paraglide.config.ts

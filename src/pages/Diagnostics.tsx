@@ -2,6 +2,7 @@ import { ArrowClockwiseIcon, ClipboardTextIcon, StethoscopeIcon } from "@phospho
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 
 import { AlertBox, Button, Separator, Spinner, Tabs, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { DiagnosticReport } from "@/lib/tauri";
 import { DiagnosticsReportView, GamesTab, useDiagnostics } from "@/modules/diagnostics";
 
@@ -134,7 +135,7 @@ function SystemTab() {
 
       {diagnostics.isError && (
         <AlertBox variant="error" title="Diagnostics failed to run">
-          {diagnostics.error?.message ?? "Unknown error"}
+          {diagnostics.error ? errorSummary(diagnostics.error) : "Unknown error"}
         </AlertBox>
       )}
 

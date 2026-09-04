@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { StringKeySuggestion, WorkshopProject } from "@/lib/tauri";
 
 import { useSaveStringOverrides } from "../../api/useSaveStringOverrides";
@@ -105,7 +106,7 @@ export function useStringOverridesEditor(layerName: string, locale: string) {
         },
         onError: (error) => {
           setFailedDraft(attempted);
-          toast.error("Couldn't save the overrides", error.message);
+          toast.error("Couldn't save the overrides", errorSummary(error));
         },
       },
     );

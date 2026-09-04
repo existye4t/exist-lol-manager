@@ -1,6 +1,7 @@
 export * from "./appMark";
 export * from "./deepLink";
 export * from "./devConsole";
+export * from "./dialogQueue";
 export * from "./displayStore";
 export * from "./extractDialog";
 export * from "./extractRun";

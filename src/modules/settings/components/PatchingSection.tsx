@@ -10,6 +10,7 @@ import {
   TftIcon,
   useToast,
 } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { Settings } from "@/lib/tauri";
 import { usePatcherStatus, useRebuildOverlay } from "@/modules/patcher";
 import { useDetectLeagueRunAsAdmin } from "@/modules/settings/api";
@@ -36,7 +37,7 @@ export function PatchingSection({ settings, onSave }: PatchingSectionProps) {
     rebuildOverlay(undefined, {
       onSuccess: () =>
         toast.success("Overlay rebuilt", "The overlay was regenerated from scratch."),
-      onError: (error) => toast.error("Rebuild failed", error.message),
+      onError: (error) => toast.error("Rebuild failed", errorSummary(error)),
     });
   };
 

@@ -60,6 +60,18 @@ zip = "2.2.0"
 rmp-serde = "1"
 base64 = "0.22"
 sha2 = "0.10"
+hex = "0.4"
 
 assert_matches = "1.5"
 filetime = "0.2"
+
+# `ltk_meta::walk` is on the toolkit's `feat/value-walk` branch (PR 227) and
+# not yet on crates.io. Patched rather than pinned as a git dependency, so that
+# `ltk_meta` and every other toolkit crate here share one `ltk_hash`: the three
+# crates `ltk_meta` pulls by path come from the same rev for the same reason.
+# Move the pin to the release that carries it.
+[patch.crates-io]
+ltk_meta = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "0bc9d0ea352b8e28d5aeef3c589bd970ed290e38" }
+ltk_hash = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "0bc9d0ea352b8e28d5aeef3c589bd970ed290e38" }
+ltk_io_ext = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "0bc9d0ea352b8e28d5aeef3c589bd970ed290e38" }
+ltk_primitives = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "0bc9d0ea352b8e28d5aeef3c589bd970ed290e38" }

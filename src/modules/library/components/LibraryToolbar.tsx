@@ -28,6 +28,7 @@ import { useLibraryViewMode } from "@/modules/library/api";
 import { ActiveFilterChips } from "./ActiveFilterChips";
 import { AnalyzeUncategorizedAction } from "./AnalyzeUncategorizedAction";
 import { FilterPopover } from "./FilterPopover";
+import { ModHealthCheckAction } from "./ModHealthCheckAction";
 import { PlayButton } from "./PlayButton";
 import { ProfileSelector } from "./ProfileSelector";
 import { SelectionButton } from "./SelectionButton";
@@ -93,6 +94,8 @@ export function LibraryToolbar({
         />
 
         <AnalyzeUncategorizedAction disabled={isPatcherActive || isLoading} />
+
+        <ModHealthCheckAction disabled={isLoading} />
 
         <SegmentedControl
           options={VIEW_OPTIONS}

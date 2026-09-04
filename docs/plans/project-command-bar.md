@@ -153,7 +153,7 @@ neither was rejected for quality. Two things ruled them out. One ranking rule ha
 the IPC boundary and there is no faithful port of either into TypeScript, and moving the
 project's own matching into Rust to get a single matcher does not work - a command and an open
 tab hold a closure and a React node, so neither crosses IPC at all. Both are also MPL-2.0
-against this workspace's `MIT OR Apache-2.0`, and neither has shipped a release since 2024.
+against this workspace's `GPL-3.0-or-later`, and neither has shipped a release since 2024.
 
 The question is moot now that a query is a substring. Twenty lines of `find` need no dependency.
 It comes back if a fuzzy mode is ever added, and the answer would be the same.

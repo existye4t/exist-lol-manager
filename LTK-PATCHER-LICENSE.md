@@ -5,7 +5,7 @@
 **Licensor:** League Toolkit Organization ("League Toolkit")
 **Applies to:** the patcher binaries shipped with LTK Manager — `ltk_patcher_dll.dll` and `ltk_patcher_host.exe` — and any binaries derived from them (together, the "Binaries")
 
-LTK Manager itself is dual-licensed MIT / Apache-2.0. This license governs only the Binaries.
+LTK Manager itself is licensed under the GNU General Public License v3.0 or later. This license governs only the Binaries.
 
 ## 1. Permission
 

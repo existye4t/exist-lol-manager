@@ -2,6 +2,7 @@ import { GearIcon } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 
 import { Button, EmptyState, Spinner } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { AppError } from "@/lib/tauri";
 import { hasErrorCode } from "@/utils/errors";
 
@@ -32,7 +33,9 @@ export function GameWadsErrorState({ error }: { error: AppError }) {
     );
   }
 
-  return <EmptyState size="sm" title="Failed to read game archives" description={error.message} />;
+  return (
+    <EmptyState size="sm" title="Failed to read game archives" description={errorSummary(error)} />
+  );
 }
 
 /** Every entry is a bare hash, which is what an unsynced hash table leaves. */

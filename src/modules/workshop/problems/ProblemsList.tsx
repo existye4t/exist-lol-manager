@@ -5,6 +5,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { AlertBox, Code, EmptyState, Spinner } from "@/components";
 import { useZoomedPx } from "@/hooks";
 import { NO_OVERSCROLL } from "@/hooks/useOverscrollSpring";
+import { errorSummary } from "@/i18n";
 
 import { useProjectProblems } from "../api";
 import { useProjectContext } from "../components/ProjectContext";
@@ -119,7 +120,7 @@ export function ProblemsList({ query }: ProblemsListProps) {
     return (
       <div data-ui="ProblemsList" className="p-2">
         <AlertBox variant="error" title="Couldn't check this project">
-          {error.message}
+          {errorSummary(error)}
         </AlertBox>
       </div>
     );

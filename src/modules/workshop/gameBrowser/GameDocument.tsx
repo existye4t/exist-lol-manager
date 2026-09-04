@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { twMerge } from "tailwind-merge";
 
 import { EmptyState, Field, IconButton, Spinner, Tooltip } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { GameFindHit, GameFindResult } from "@/lib/tauri";
 import { DocumentToolbar, type EditorDocumentProps } from "@/modules/editor";
 import {
@@ -281,7 +282,7 @@ function FindResults() {
     <>
       {patternError && (
         <p className="shrink-0 border-b border-surface-700/50 px-3 pb-1.5 font-mono text-xs whitespace-pre-wrap text-danger-text">
-          {patternError.message}
+          {errorSummary(patternError)}
         </p>
       )}
       {data && data.unnamed && <UnknownHashHint />}

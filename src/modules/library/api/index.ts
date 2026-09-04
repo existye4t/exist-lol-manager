@@ -54,6 +54,7 @@ export { useSetModLayers } from "./useSetModLayers";
 export { useSetModStorage } from "./useSetModStorage";
 export { useSkinhackFlag } from "./useSkinhackFlag";
 export { useSortableModDnd } from "./useSortableModDnd";
+export { useSweepModHealth } from "./useSweepModHealth";
 export { useSwitchProfile } from "./useSwitchProfile";
 export { useToggleMod } from "./useToggleMod";
 export { useUnifiedDnd } from "./useUnifiedDnd";

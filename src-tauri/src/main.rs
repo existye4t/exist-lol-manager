@@ -14,6 +14,7 @@ mod logging;
 mod mods;
 pub mod patcher;
 mod protocol;
+mod releases;
 mod setup;
 mod state;
 mod tray;
@@ -95,6 +96,7 @@ fn main() {
             commands::time_mod_health,
             commands::cancel_mod_health_run,
             commands::get_health_sweep,
+            commands::sweep_mod_health,
             commands::get_health_check_readiness,
             commands::inspect_modpkg,
             commands::get_mod_thumbnail,
@@ -216,6 +218,33 @@ fn main() {
             // Deep Link
             commands::deep_link_install_mod,
             commands::take_pending_deep_link,
+            // Releases
+            commands::list_releases,
+            // Exist Skin Library
+            commands::get_exist_catalog,
+            commands::download_exist_skin,
+            commands::enqueue_exist_download,
+            commands::get_exist_download_queue,
+            commands::pause_exist_download,
+            commands::resume_exist_download,
+            commands::cancel_exist_download,
+            commands::retry_exist_download,
+            commands::remove_exist_download,
+            commands::get_installed_exist_skins,
+            commands::apply_exist_skin,
+            commands::unapply_exist_skin,
+            commands::delete_exist_skin,
+            // Exist Skin Update
+            commands::check_exist_skin_update,
+            commands::update_exist_skin,
+            commands::get_exist_skins_update_status,
+            // Exist Sync
+            commands::sync_exist_skin_catalog,
+            commands::get_exist_catalog_status,
+            // RuneForge
+            commands::get_runeforge_catalog,
+            commands::get_runeforge_champions,
+            commands::get_runeforge_thumbnail,
             // for dynamic icons
             tray::set_tray_state,
         ])

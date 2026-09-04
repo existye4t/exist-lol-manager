@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Download, FolderOpen, Hammer, Plus, Settings } from "lucide-react";
 
 import { Button, EmptyState } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { AppError } from "@/lib/tauri";
 import { useWorkshopDialogsStore } from "@/stores";
 
@@ -23,7 +24,7 @@ export function ErrorState({ error }: { error: AppError }) {
         <span className="text-2xl">⚠️</span>
       </div>
       <h3 className="mb-1 text-lg font-medium text-surface-300">Failed to load projects</h3>
-      <p className="mb-2 text-surface-500">{error.message}</p>
+      <p className="mb-2 text-surface-500">{errorSummary(error)}</p>
       <p className="text-sm text-surface-600">Error code: {error.code}</p>
     </div>
   );
@@ -66,7 +67,7 @@ export function NoProjectsState() {
     });
     if (file) {
       importFromModpkg.mutate(file, {
-        onError: (err) => console.error("Failed to import modpkg:", err.message),
+        onError: (err) => console.error("Failed to import modpkg:", err),
       });
     }
   }

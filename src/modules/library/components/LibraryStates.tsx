@@ -1,6 +1,7 @@
 import { DownloadSimpleIcon, WarningIcon } from "@phosphor-icons/react";
 
 import { Button, EmptyState, Skeleton } from "@/components";
+import { describeError } from "@/i18n";
 import type { AppError } from "@/lib/tauri";
 import { useLibraryActions } from "@/modules/library/api";
 import { hasErrorCode } from "@/utils/errors";
@@ -23,16 +24,16 @@ export function LibraryLoadingState() {
 }
 
 export function LibraryErrorState({ error }: { error: AppError }) {
+  const copy = describeError(error);
+
   if (hasErrorCode(error, "SCHEMA_VERSION_TOO_NEW")) {
     return (
       <div className="flex h-64 flex-col items-center justify-center text-center">
         <div className="mb-4 rounded-full bg-warning/10 p-4">
           <WarningIcon weight="bold" className="h-8 w-8 text-warning-text" />
         </div>
-        <h3 className="mb-1 text-lg font-medium text-surface-300">
-          Mod library requires a newer version
-        </h3>
-        <p className="mb-2 max-w-md text-surface-500">{error.message}</p>
+        <h3 className="mb-1 text-lg font-medium text-surface-300">{copy.title}</h3>
+        <p className="mb-2 max-w-md text-surface-500">{copy.description}</p>
       </div>
     );
   }
@@ -43,7 +44,8 @@ export function LibraryErrorState({ error }: { error: AppError }) {
         <span className="text-2xl">⚠️</span>
       </div>
       <h3 className="mb-1 text-lg font-medium text-surface-300">Failed to load mods</h3>
-      <p className="mb-2 text-surface-500">{error.message}</p>
+      <p className="mb-2 text-surface-500">{copy.title}</p>
+      {copy.detail && <p className="mb-2 text-surface-500">{copy.detail}</p>}
       <p className="text-sm text-surface-600">Error code: {error.code}</p>
     </div>
   );

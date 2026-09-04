@@ -2,6 +2,7 @@ import { useStore } from "@tanstack/react-form";
 import { useState } from "react";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { useAppForm } from "@/lib/form";
 import type { WorkshopAuthor, WorkshopProject } from "@/lib/tauri";
 
@@ -86,7 +87,7 @@ export function useProjectDetails(project: WorkshopProject) {
       },
       {
         onSuccess: () => toast.success("Project configuration saved"),
-        onError: (error) => toast.error(`Failed to save: ${error.message}`),
+        onError: (error) => toast.error(`Failed to save: ${errorSummary(error)}`),
       },
     );
   }

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type InstalledMod, type ModWadReport } from "@/lib/tauri";
 import { isOk } from "@/utils/result";
 
@@ -67,7 +68,7 @@ export function useAnalyzeUncategorizedMods() {
               (old) => ({ ...(old ?? {}), [report.modId]: report }),
             );
           } else {
-            failures.push({ name: mod.displayName, message: result.error.message });
+            failures.push({ name: mod.displayName, message: errorSummary(result.error) });
           }
         } catch (err) {
           failures.push({
@@ -97,7 +98,7 @@ export function useAnalyzeUncategorizedMods() {
       );
     },
     onError: (error) => {
-      toast.error("Failed to analyze mods", error.message);
+      toast.error("Failed to analyze mods", errorSummary(error));
     },
   });
 }

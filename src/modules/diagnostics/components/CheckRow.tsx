@@ -3,6 +3,7 @@ import { useState } from "react";
 import { twMerge } from "tailwind-merge";
 
 import { Button, IconButton, Tooltip, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type Check, isErr } from "@/lib/tauri";
 
 import { SeverityBadge } from "./SeverityBadge";
@@ -36,7 +37,7 @@ export function CheckRow({ check }: { check: Check }) {
     }
     const result = await api.openElevatedTerminal(clipboardOk);
     if (isErr(result)) {
-      toast.error("Could not open elevated terminal", result.error.message);
+      toast.error("Could not open elevated terminal", errorSummary(result.error));
       return;
     }
     if (clipboardOk) {

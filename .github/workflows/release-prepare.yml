@@ -19,6 +19,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # git-cliff reads back to the last tag to draft the notes.
+          fetch-depth: 0
 
       - name: Resolve version
         id: version
@@ -44,6 +47,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "::notice::Preparing release v$VERSION (current: $CURRENT)"
 
+      - name: Draft release notes
+        id: changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --unreleased --strip header
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -55,6 +65,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GENERATED: ${{ steps.changelog.outputs.content }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BRANCH="release/v$VERSION"
@@ -73,17 +84,32 @@ jobs:
           node scripts/generate-licenses.mjs
           node scripts/generate-meta-schema.mjs
 
+          # Notes written ahead of the release stand. Otherwise the commit
+          # list goes in as a draft to be rewritten in this PR, since a
+          # subject in the codebase's own vocabulary is not what an
+          # installer reads.
+          NOTES="docs/releases/$VERSION.md"
+          mkdir -p docs/releases
+          if [ ! -f "$NOTES" ]; then
+            printf '%s\n' "$GENERATED" > "$NOTES"
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add package.json src-tauri/Cargo.toml Cargo.lock \
             public/third-party-licenses.json \
-            crates/ltk-manager-core/src/meta_schema/schema-snapshot.json.gz
+            crates/ltk-manager-core/src/meta_schema/schema-snapshot.json.gz \
+            "$NOTES"
           git commit -m "chore: release v$VERSION"
           git push origin "$BRANCH"
 
+          BODY=$(printf '%s\n\n%s\n' \
+            "Bumps version to **v$VERSION** in \`package.json\` and \`Cargo.toml\`, and re-runs the licenses manifest and meta schema snapshot generators." \
+            "**Edit \`docs/releases/$VERSION.md\` before merging.** It is the release body users read, and it starts as the raw commit list.")
+
           gh pr create \
             --title "chore: release v$VERSION" \
-            --body "Bumps version to **v$VERSION** in \`package.json\` and \`Cargo.toml\`, and re-runs the licenses manifest and meta schema snapshot generators." \
+            --body "$BODY" \
             --base main \
             --head "$BRANCH"

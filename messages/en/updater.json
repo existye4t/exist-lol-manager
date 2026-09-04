@@ -1,0 +1,16 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "updater_changelog_title": "What's New",
+  "updater_history_end_label": "No older releases",
+  "updater_history_error_title": "Couldn't load older releases",
+  "updater_history_retry_action": "Retry",
+  "updater_install_action": "Update Now",
+  "updater_install_failed_title": "Update failed",
+  "updater_install_progress_label": "Installing update",
+  "updater_install_restart_hint": "The app restarts once the install finishes.",
+  "updater_install_retry_action": "Retry Update",
+  "updater_release_pending_label": "New",
+  "updater_release_prerelease_label": "Pre-release",
+  "updater_skip_version_label": "Skip this version",
+  "updater_version_upgrade_label": "v{from} → v{to}"
+}

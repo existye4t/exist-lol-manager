@@ -11,6 +11,7 @@ import {
   Spinner,
   useToast,
 } from "@/components";
+import { errorSummary } from "@/i18n";
 import type {
   HashtableStatus,
   HashtableSyncProgress,
@@ -124,7 +125,7 @@ export function CacheSection() {
         }
         toast.success("Hashtables updated", syncedLabel(report));
       },
-      onError: (err) => toast.error("Sync failed", err.message),
+      onError: (err) => toast.error("Sync failed", errorSummary(err)),
       onSettled: () => setProgress(null),
     });
   }
@@ -137,7 +138,7 @@ export function CacheSection() {
             <Spinner />
           </div>
         )}
-        {error && <AlertBox variant="error">{error.message}</AlertBox>}
+        {error && <AlertBox variant="error">{errorSummary(error)}</AlertBox>}
       </SectionCard>
     );
   }

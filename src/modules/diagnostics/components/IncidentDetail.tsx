@@ -13,9 +13,11 @@ import type { ReactNode } from "react";
 
 import { Button, Tooltip, useToast } from "@/components";
 import { useCopyToClipboard } from "@/hooks";
+import { errorSummary } from "@/i18n";
 import type { Incident, Suspect } from "@/lib/tauri";
 import { useInstalledMods, useToggleMod } from "@/modules/library";
 import { usePatcherStatus, useRebuildOverlay } from "@/modules/patcher";
+import { isAppError } from "@/utils/errors";
 
 import {
   incidentReportOptions,
@@ -150,7 +152,7 @@ function DisableModButton({ modId }: { modId: string }) {
           {
             onSuccess: () =>
               toast.warning("Mod disabled", `${mod.displayName} stays out of the next game.`),
-            onError: (error) => toast.error("Couldn't disable the mod", error.message),
+            onError: (error) => toast.error("Couldn't disable the mod", errorSummary(error)),
           },
         )
       }
@@ -203,9 +205,8 @@ function FactsLine({ incident }: { incident: Incident }) {
 }
 
 function messageOf(error: unknown): string {
-  if (typeof error === "object" && error !== null && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
+  if (isAppError(error)) return errorSummary(error);
+  if (error instanceof Error) return error.message;
   return "Unknown error";
 }
 
@@ -247,7 +248,7 @@ function IncidentActions({ incident }: { incident: Incident }) {
 
   function openGameLog() {
     revealLog.mutate(incident.id, {
-      onError: (error) => toast.error("Couldn't open the game log", error.message),
+      onError: (error) => toast.error("Couldn't open the game log", errorSummary(error)),
     });
   }
 
@@ -255,7 +256,7 @@ function IncidentActions({ incident }: { incident: Incident }) {
     rebuild.mutate(undefined, {
       onSuccess: () =>
         toast.success("Overlay rebuilt", "The overlay was regenerated from scratch."),
-      onError: (error) => toast.error("Rebuild failed", error.message),
+      onError: (error) => toast.error("Rebuild failed", errorSummary(error)),
     });
   }
 

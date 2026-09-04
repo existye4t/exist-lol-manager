@@ -17,6 +17,14 @@ export interface ToastData {
   timeout?: number;
   action?: ToastAction;
   /**
+   * A mark of the toast's own, where the type's glyph is not the subject.
+   *
+   * Sized as the type glyphs are, `h-5 w-5`, and coloured by the caller. The
+   * stripe and the countdown stay the type's either way, so the line is still
+   * found as an info toast by everything except its mark.
+   */
+  icon?: ReactNode;
+  /**
    * How far a running task has got, 0-100, in the countdown's place.
    *
    * A toast that stays until its work ends has no dismissal to count down, so
@@ -58,19 +66,34 @@ const typeProgressColors: Record<ToastType, string> = {
   info: "bg-info",
 };
 
+/**
+ * The countdown, and what ends the toast when it runs out.
+ *
+ * The strip is what a reader is watching, so it is what decides: base-ui runs a
+ * timer of its own and pauses it on rules this one does not share - a window
+ * that was not focused when the toast arrived leaves it paused - which left
+ * empty strips sitting on screen.
+ */
 function ToastProgressBar({
   timeout,
   type,
   paused,
+  onExpire,
 }: {
   timeout: number;
   type: ToastType;
   paused: boolean;
+  onExpire: () => void;
 }) {
   const [progress, setProgress] = useState(100);
   const startTimeRef = useRef(Date.now());
   const elapsedBeforePauseRef = useRef(0);
   const rafRef = useRef<number>(undefined);
+  const expire = useRef(onExpire);
+
+  useEffect(() => {
+    expire.current = onExpire;
+  });
 
   useEffect(() => {
     if (paused) {
@@ -87,7 +110,9 @@ function ToastProgressBar({
       setProgress(remaining);
       if (remaining > 0) {
         rafRef.current = requestAnimationFrame(tick);
+        return;
       }
+      expire.current();
     };
 
     rafRef.current = requestAnimationFrame(tick);
@@ -126,10 +151,11 @@ interface ToastItemProps {
 }
 
 export function ToastItem({ toast }: ToastItemProps) {
+  const { close } = BaseToast.useToastManager();
   const type = toast.data?.type ?? "info";
   const timeout = toast.data?.timeout ?? 5000;
   const progress = toast.data?.progress;
-  const icon = typeIcons[type];
+  const icon = toast.data?.icon ?? typeIcons[type];
   const [hovered, setHovered] = useState(false);
 
   const handleMouseEnter = useCallback(() => setHovered(true), []);
@@ -162,7 +188,12 @@ export function ToastItem({ toast }: ToastItemProps) {
           {toast.data?.action && (
             <button
               type="button"
-              onClick={() => toast.data?.action?.onClick()}
+              /* The action is the way out as much as the ✕ is: a toast still
+                 sitting there is a press the reader has to make twice. */
+              onClick={() => {
+                toast.data?.action?.onClick();
+                close(toast.id);
+              }}
               className="mt-1 cursor-pointer text-sm font-medium text-accent-400 transition-colors hover:text-accent-300"
             >
               {toast.data.action.label}
@@ -177,7 +208,12 @@ export function ToastItem({ toast }: ToastItemProps) {
         </BaseToast.Close>
       </BaseToast.Content>
       {progress === undefined && (
-        <ToastProgressBar timeout={timeout} type={type} paused={hovered} />
+        <ToastProgressBar
+          timeout={timeout}
+          type={type}
+          paused={hovered}
+          onExpire={() => close(toast.id)}
+        />
       )}
       {progress !== undefined && <ToastTaskBar value={progress} />}
     </BaseToast.Root>
@@ -211,6 +247,7 @@ export function useToast() {
       type?: ToastType;
       timeout?: number;
       action?: ToastAction;
+      icon?: ReactNode;
       notify?: boolean;
     }) => {
       const type = options.type ?? "info";
@@ -221,7 +258,7 @@ export function useToast() {
       return toastManager.add({
         title: options.title,
         description: options.description,
-        data: { type, timeout, action: options.action },
+        data: { type, timeout, action: options.action, icon: options.icon },
         timeout,
       });
     },

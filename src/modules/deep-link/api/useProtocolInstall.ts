@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type InstalledMod } from "@/lib/tauri";
 import { useDeepLinkStore } from "@/stores";
 import { unwrapForQuery } from "@/utils/query";
@@ -32,7 +33,7 @@ export function useProtocolInstall() {
       queryClient.invalidateQueries({ queryKey: libraryKeys.mods() });
     },
     onError: (error) => {
-      useDeepLinkStore.getState().setError(error.message);
+      useDeepLinkStore.getState().setError(errorSummary(error));
     },
   });
 }

@@ -4,18 +4,16 @@
 
 | Date       | Change                                                       |
 | ---------- | ------------------------------------------------------------ |
+| 2026-09-02 | A press about one mod opens the panel on that mod            |
+| 2026-09-02 | Select mode no longer withholds the panel from a press       |
+| 2026-09-02 | The library is checked by hand, over all of it or a pick     |
+| 2026-09-02 | The announcement is spent on the findings, not on the launch |
+| 2026-09-02 | Severity decides the hue, and the verdict decides the words  |
 | 2026-09-01 | A rule's own severity comes from the build, not the store    |
 | 2026-09-01 | The count is a count, and the repair's reach is words beside |
 | 2026-09-01 | The basis names the meta schema, and its sync makes it due   |
 | 2026-08-30 | A repair refuses in words when the tables are not there      |
 | 2026-08-30 | The rejected fourth verdict word moves to ADR-0009           |
-| 2026-08-30 | The menu row says what it waits for, before it is pressed    |
-| 2026-08-30 | A check waits for the hashtables instead of judging without  |
-| 2026-08-30 | A repair reaches a bin by its chunk hash, and the check does |
-| 2026-08-30 | The basis names the hashtables, and the sweep syncs first    |
-| 2026-08-28 | The footer answers the dialog, whether or not it can repair  |
-| 2026-08-29 | A rule line says its cause, and only the exception is marked |
-| 2026-08-29 | A row unfolds into rules, wears the dot, and frees its seat  |
 
 Each edit of this document adds a row at the top. The table keeps the last ten rows.
 
@@ -39,26 +37,28 @@ screen.
 This table holds every major feature of Mod health. A status word has one meaning - see
 [Problems](PROJECT_PROBLEMS.md) for the legend.
 
-| Feature               | Status    | Note                                                         |
-| --------------------- | --------- | ------------------------------------------------------------ |
-| The verdict model     | Available | `ModHealthVerdict`: health, fixable count, live counts       |
-| The check             | Available | `check_mod_health`, both storages, never writes the mod      |
-| The repair            | Available | `repair_mod`, both storages, applies every live fix          |
-| The verdict store     | Available | `mod-health-verdicts.json` beside the index, one row per mod |
-| The badge             | Available | On the card, only when something is wrong                    |
-| The popover           | Available | Plain counts, Repair, re-check, and when it was checked      |
-| Check at import       | Available | A background check per install, and the import never waits   |
-| Check Health, by hand | Available | In the card menu. Says what it waits for, or answers a press |
-| The library sweep     | Available | Every mod whose basis moved, at startup, skipping the rest   |
-| The startup sync      | Available | The cache is filled in front of the sweep that reads it      |
-| Hashtables first      | Available | No check or repair runs without them - ADR-0009              |
-| The status bar item   | Available | A light cell at the right of the bar, and its drawer         |
-| Stopping a run        | Available | An ✕ beside the progress. What was written stays written     |
-| Repair all            | Available | Behind the footer's caret. The press repairs what is enabled |
-| The launch ask        | Available | Play confirms under itself when a broken mod is enabled      |
-| Verdict pruning       | Available | A sweep forgets the verdicts of mods the library dropped     |
-| The full findings     | Planned   | Behind a disclosure, for the user who wants the detail       |
-| One health surface    | Proposed  | The skinhack and missing-deps warnings join the badge        |
+| Feature               | Status    | Note                                                              |
+| --------------------- | --------- | ----------------------------------------------------------------- |
+| The verdict model     | Available | `ModHealthVerdict`: health, fixable count, live counts            |
+| The check             | Available | `check_mod_health`, both storages, never writes the mod           |
+| The repair            | Available | `repair_mod`, both storages, applies every live fix               |
+| The verdict store     | Available | `mod-health-verdicts.json` beside the index, one row per mod      |
+| The badge             | Available | On the card, only when something is wrong                         |
+| The popover           | Available | Plain counts, Repair, re-check, and when it was checked           |
+| Check at import       | Available | A background check per install, and the import never waits        |
+| Check Health, by hand | Available | In the card menu. Says what it waits for, or answers a press      |
+| Checking the library  | Available | A toolbar press over all of it, a selection bar press over a pick |
+| The library sweep     | Available | Every mod whose basis moved, at startup, skipping the rest        |
+| The startup sync      | Available | The cache is filled in front of the sweep that reads it           |
+| Hashtables first      | Available | No check or repair runs without them - ADR-0009                   |
+| The alarm ladder      | Available | Three rungs. The hue is the severity, the words the verdict       |
+| The status bar item   | Available | A light cell at the right of the bar, and its drawer              |
+| Stopping a run        | Available | An ✕ beside the progress. What was written stays written          |
+| Repair all            | Available | Behind the footer's caret. The press repairs what is enabled      |
+| The launch ask        | Available | Play confirms under itself when a broken mod is enabled           |
+| Verdict pruning       | Available | A sweep forgets the verdicts of mods the library dropped          |
+| The full findings     | Planned   | Behind a disclosure, for the user who wants the detail            |
+| One health surface    | Proposed  | The skinhack and missing-deps warnings join the badge             |
 
 ## The verdict
 
@@ -263,37 +263,61 @@ a manual rebuild.
 A modpkg is not checked or repaired. Its content only exists inside its archive, and there is
 no unpacked form to run the rules over - the same boundary as ADR-0001.
 
+## How loud a finding is drawn
+
+**The verdict says what a repair can do. The severity says how much it matters.** Every surface mod
+health has reads both, because `unrepairable` covers a mod the game will refuse to load and a mod
+that plays with one effect missing, and those two do not deserve the same colour. So there are
+three rungs, not two, and the hue is the severity's while the words stay the verdict's.
+
+| Rung         | The mod                                     | Hue   | The errand                  |
+| ------------ | ------------------------------------------- | ----- | --------------------------- |
+| `repairable` | A repair reaches at least one finding       | Amber | Press the button            |
+| `broken`     | No repair, and a fatal or an error          | Red   | Go and find a newer version |
+| `flagged`    | No repair, and nothing worse than a warning | Grey  | Nothing. Keep playing it    |
+
+There is no fourth rung, because `Info` alone never makes a mod unhealthy - see
+[The verdict](#the-verdict).
+
+**A repair on offer leads, whatever else is in the list.** Where a surface answers for several mods
+at once, `repairable` outranks the other two: the press is what the reader is being sent to, and a
+library five presses from fixed is not one to paint red over the one mod that has to be replaced
+instead. Below that the loudest wins, so one mod the game refuses is enough to make a list red.
+
+**This is what 1.15 got wrong, and it is why a user shipped a screenshot of it.** The hue was the
+verdict's alone: the moment no repair reached the library, the bar went red and the card said the
+mod could not be repaired. A mod whose only finding was a warning - `bin/property-type` on an
+install that has not taken the change - therefore read exactly like a mod the game refuses to load,
+and readers went looking for replacements that did not exist for a mod that was working.
+
+**Neither `broken` nor `flagged` is a fourth verdict word.** The stored verdict is still one of
+three, and the split is in what a surface reads rather than in what the check concludes, so nothing
+in `mod-health-verdicts.json` changes shape and the counts every rung needs are already on each
+row.
+
 ## The badge
 
 The badge sits on the mod card beside the missing-dependency badge, and it
 draws only when something is wrong. A healthy mod shows nothing, and so does a mod never
 checked - a badge on every card would bury the few that matter.
 
-**The verdict says what a repair can do. The severity says how much it matters.** The badge is
-the one surface that has to read both, because `unrepairable` covers a mod the game will refuse
-to load and a mod that plays with one effect missing, and those two do not deserve the same
-colour.
+It is one mod's [rung](#how-loud-a-finding-is-drawn), drawn as a pill.
 
-| Verdict        | Findings                | Badge                                    |
-| -------------- | ----------------------- | ---------------------------------------- |
-| `healthy`      | none                    | Nothing                                  |
-| `repairable`   | any                     | Amber wrench pill with the fixable count |
-| `unrepairable` | a fatal or an error     | Red alert pill with the finding count    |
-| `unrepairable` | warnings and infos only | Muted pill with the finding count        |
+| Rung         | Pill                                     | Headline                    |
+| ------------ | ---------------------------------------- | --------------------------- |
+| `repairable` | Amber wrench pill with the fixable count | This mod needs a repair     |
+| `broken`     | Red alert pill with the finding count    | This mod cannot be repaired |
+| `flagged`    | Grey warning pill with the finding count | This mod loads with a fault |
 
 The popover behind the pill carries the verdict in plain counts, when the check ran, one
 Repair button, and a re-check. It never shows a property path - the full findings wait for the
 disclosure row above.
 
-The two unrepairable rows say different things, because their users have different problems. The
+The two unrepairable rungs say different things, because their users have different problems. The
 red one says to look for an updated version of the mod, because "stop trying" is the actionable
-half of that verdict. The muted one says the mod loads and something in it will not behave, and
-it does not tell anyone to go looking - a mod whose worst finding is a warning is a mod most
-people should keep and play.
-
-**Neither of them is a fourth word.** The stored verdict is still one of three, and the split is
-in what the badge reads rather than in what the check concludes, so nothing in
-`mod-health-verdicts.json` changes shape and the counts a badge needs are already on every row.
+half of that verdict. The grey one says the mod loads and something in it will not behave, and it
+does not tell anyone to go looking - a mod whose worst finding is a warning is a mod most people
+should keep and play.
 
 ## The library sweep
 
@@ -329,15 +353,49 @@ nothing a verdict could honestly say, so the pass prunes what the library droppe
 One mod that cannot be read is logged and stepped over. It records no verdict, so the next sweep
 tries it again rather than treating an unreadable archive as an answer.
 
-**Startup is one of two triggers.** The other is a hashtable sync that installed something, which
-sweeps as it finishes rather than leaving the badges to the next launch - the press has just
-disproved every verdict on screen. A patch that lands while the manager is open is not noticed
+**Startup is one of three triggers.** The second is a hashtable sync that installed something,
+which sweeps as it finishes rather than leaving the badges to the next launch - the press has just
+disproved every verdict on screen. The third is a reader pressing for one, which is
+[its own section](#checking-the-library-by-hand) because it takes the library on different terms. A patch that lands while the manager is open is not noticed
 until the next launch, and neither is a League path pointed somewhere else in Settings. Both leave
 the badges and the bar's item describing the build the manager started on. Read
 [open question 1](#open-questions).
 
 **A sweep prunes before it checks.** Nothing else drops a verdict, so without that step the file
 grows for the life of the library and an uninstalled mod's verdict outlives it forever.
+
+## Checking the library by hand
+
+**A reader who suspects their library does not have to open twenty card menus to find out.** The
+card menu answers for one mod and the startup pass answers when a basis moved, which between them
+leave nothing at all for the reader who changed something the manager cannot see, or who simply
+wants to know now. Two presses in the library are that answer.
+
+| The press         | What it takes              |
+| ----------------- | -------------------------- |
+| The toolbar       | Every mod in the library   |
+| The selection bar | The mods the reader picked |
+
+**A press takes the verdicts again, whatever their basis says.** That is the whole difference
+between it and the startup pass. Skipping a mod whose stored verdict is still current is what makes
+the automatic sweep affordable, and it is what would make a pressed one look broken - a reader who
+asked is owed a check, not a report on how little there was to do.
+
+**It answers before the press, and refuses after it.** With no hashtables the automatic pass stands
+down silently, because nobody asked it anything - see
+[The hashtables come first](#the-hashtables-come-first). A press has somebody waiting, so each
+control draws the wait in its tooltip in the card menu's own three states, and the run refuses in
+words for the press that lands in the moment the answer changes.
+
+**One run at a time.** A pressed run is the startup sweep's own machinery, so it shares the progress
+toast, the verdict file and the one cancel. A press while a sweep is going says so and changes
+nothing, because two runs would leave the reader watching two counters fight over one line.
+
+**The press reopens the question the announcement answers.** A library that comes back exactly as it
+went in still owes the reader a sentence, and the announcement is otherwise spent on those findings
+for good. So the run announces what it found in whichever form the
+[rung](#how-loud-a-finding-is-drawn) calls for, and a run that found nothing wrong says "No problems
+found" - a clean check draws no badge, and a press with no answer looks ignored.
 
 ## The status bar item and the drawer
 
@@ -383,9 +441,14 @@ a count. It lightens under the pointer, which is the one thing a solid cell coul
 reader learns once. It is also why nothing floats over the grid any more - the cards stay whole,
 and a mod card is never covered by news about itself.
 
-**It carries a count, and the drawer carries the words.** `19 repairs`, or `1 broken` where no
-repair can reach the library. A cell has room for a number and little else, and the title saying
-what to do about it is one press away.
+**It carries a count, and the drawer carries the words.** `19 repairs`, `1 broken` where the game
+would refuse one of them, and `1 flagged` where no repair reaches the library and nothing in it
+stops a mod loading. A cell has room for a number and little else, and the title saying what to do
+about it is one press away.
+
+**`broken` is spent only where the game is what pays.** It is the loudest word the bar has, and a
+word that describes every unhealthy library is a word that describes none of them - which is how a
+library of working mods came to wear a red cell reading `1 broken`.
 
 **It is ambient, so it is not dismissible.** It appears when the library has something wrong and
 leaves when the library is clean. There is no dismiss and no dismissed-for-this-session state,
@@ -409,14 +472,37 @@ means "I'm done here". Nothing outside is reachable in the meantime, which is th
 a panel this size.
 
 **It still reflows nothing.** A panel that pushed the cards aside would move the one somebody was
-reaching for. It steps aside for select mode, which is a mode the user is holding open and would
-fight a sheet over the grid they are picking from.
+reaching for.
 
-**It opens itself once, when the library first turns out to be broken.** A cell in the status bar
-is a thing you learn to look at, and nobody has learned it on their first run - so the drawer says
-what is wrong instead of waiting to be asked. Once for the life of the app, whether or not a sweep
-just ran, and a reader who closes it has answered: it does not come back when the next verdict
+**Select mode does not withhold it.** The panel did step aside for that mode while it was a sheet
+over the grid, which was a sheet fighting the cards a reader was picking from. A centred dialog
+covers the grid whatever mode is up, so all the rule did by then was leave "Show me" and the
+selection's own Check health pressing nothing at all - and a press that draws nothing is the one
+thing every control here owes an answer to. Escape and Ctrl+A belong to the panel while it is
+showing, so leaving it does not also drop the selection underneath.
+
+**It announces itself once, when the library first turns out to be unhealthy.** A cell in the
+status bar is a thing you learn to look at, and nobody has learned it on their first run - so mod
+health says what is wrong instead of waiting to be asked. Once per run, whether or not a sweep just
+ran, and a reader who has answered it has answered: it does not come back when the next verdict
 lands. Everything after that is the cell, which is where a reader who wants it knows to look.
+
+**What spends it is the findings, not the run.** A library somebody has decided to keep is not news
+twice, and an announcement that greets a reader every launch over the same mods is one they learn
+to dismiss unread. So what they were told outlives the launch: each unhealthy mod, and how much is
+wrong with it. A launch that finds that same library says nothing and leaves it to the cell. A mod
+that turned up, got worse or got repaired is a different library, and that one is announced.
+
+There is no dismiss control, for the same reason the cell has none. Meeting it is what spends it,
+and letting the toast go is a way of meeting it. Only what is wrong is compared, so re-ordering the
+library is not a change, and neither is an `Info` count that moved - by
+[The verdict](#the-verdict) that is not a fault in the first place.
+
+**What the announcement is depends on the rung.** Taking the screen away is worth it for a library
+the game will refuse and is not worth it for one it will load, so `flagged` announces itself as an
+info toast carrying the drawer's own poro, one line, and a Show me that opens the panel.
+`repairable` and `broken` still open the drawer outright. The announcement is one either way:
+whichever form it takes, it is spent, and the cell carries the rest.
 
 **The press sits where a dialog's confirm sits.** Bottom right of a footer band of its own, at the
 size every other dialog in the app confirms at. It was the panel's whole bottom edge for a while,
@@ -465,6 +551,16 @@ lasts, and goes back to holding the button when it ends. The bar spans that band
 sitting where the button sat, because a progress bar reports a whole run and has no reason to be
 the width of one press. The outcome stays a toast: by
 then the drawer has usually emptied itself and gone.
+
+**A press about one mod opens the panel on that mod.** The library-wide surfaces stay quiet about a
+mod whose findings are all `Info` - that is [the verdict](#the-verdict) doing its job, and none of
+it is a fault. A reader who pressed Check Health on that mod asked anyway, so its row joins the
+list, the panel scrolls to it and unfolds it. The title is the one thing that cannot carry over: a
+panel drawing nothing that is wrong says "No problems found" rather than calling them issues, and
+the row is sent nowhere, since it is missing no press.
+
+That row leaves with the panel. Nothing about it is remembered, because nothing about it is wrong -
+the next time the panel opens it holds what the library is carrying and no more.
 
 **The drawer holds the whole finding.** A header that says what to do, one row per mod, and the
 one press. The rows run flat, as the Problems panel lists one file per row, and a row is a mod
@@ -550,6 +646,12 @@ under Play leaves the button, the count in the status bar and the library all in
 **Only the enabled mods count.** A broken mod nothing will apply is not what this launch is about,
 and warning over one teaches the reader to press through the warning that matters.
 
+**Only what the game pays for asks.** The same argument, one rung down: a mod that loads and plays
+is not a press to interrupt, so a `flagged` mod is carried into the game without a word. What holds
+a launch up is a `broken` mod, and a `repairable` one - a repair is one press, and it is worth
+offering before the game starts whatever the finding was going to cost. The count in the ask is
+what it is asking about, so a library of one of each says `1 broken mod`.
+
 **Every way in asks, the split menu included.** A gate the menu walks around is not a gate, and
 whether a given entry reaches the mods is a question about patcher state the reader is not
 tracking - Launch League applies the overlay when the patcher is already up and applies nothing
@@ -598,23 +700,26 @@ standing there naming mods that are already fixed.
 
 ## When a check runs
 
-| Trigger                    | How                                                       |
-| -------------------------- | --------------------------------------------------------- |
-| A game patch               | The startup sweep, because every verdict's basis moved    |
-| A manager release          | The same, because a release is how a table ships          |
-| A hashtable sync           | The same, and the sync sweeps itself rather than waiting  |
-| An install, single or bulk | A background check per imported mod, off the install path |
-| Check Health, in the menu  | On demand, answered by a toast either way                 |
-| The badge's re-check       | On demand, from the popover                               |
-| A repair                   | The repair records the post-repair verdict itself         |
+| Trigger                      | How                                                       |
+| ---------------------------- | --------------------------------------------------------- |
+| A game patch                 | The startup sweep, because every verdict's basis moved    |
+| A manager release            | The same, because a release is how a table ships          |
+| A hashtable sync             | The same, and the sync sweeps itself rather than waiting  |
+| An install, single or bulk   | A background check per imported mod, off the install path |
+| Check Health, in the menu    | On demand, answered by a toast either way                 |
+| Check health, in the library | A press over the whole library or over the selection      |
+| The badge's re-check         | On demand, from the popover                               |
+| A repair                     | The repair records the post-repair verdict itself         |
 
 The install's check runs on a detached thread and announces once at the end
 (`mod-health-verdicts-updated`), so importing thirty mods costs the import nothing and the badges
 arrive when the results do. The sweep runs on the startup thread the other three passes already
 use, reports through a toast per mod, and announces the same event when it finishes.
 
-The menu's toast exists because a clean check draws no badge: without an answer the click
-would look ignored. "No problems found" is the answer.
+The menu's answer exists because a clean check draws no badge: without one the click would look
+ignored. A mod with nothing at all in it is told so in a line - "No problems found" - and a mod
+whose findings are all informative gets [the panel](#the-status-bar-item-and-the-drawer), because a
+count in a toast names those findings without showing them.
 
 ## Decided questions
 
@@ -626,6 +731,14 @@ would look ignored. "No problems found" is the answer.
 | May a check run with no hashtables?              | No. The mod stays unchecked until they are there                   |
 | Does a launch fetch hashtables before sweeping?  | Yes, and a failed fetch does not stop the sweep                    |
 | Does the manager repair a mod on its own?        | No. Every run is a press, and it is the user's                     |
+| What decides the hue a finding is drawn in?      | Its severity. The verdict decides the words beside it              |
+| Does a warning with no repair read as broken?    | No. It is `flagged`, and it sends the reader nowhere               |
+| Does every unhealthy library open the drawer?    | No. A library the game still loads announces itself as a toast     |
+| Does the same library announce itself twice?     | No. The announcement is spent on the findings, not on the run      |
+| Does a pressed check skip a current verdict?     | No. A press takes them again, which is what a press is for         |
+| Does select mode withhold the panel?             | No. Every press that opens it is answered, whatever mode is up     |
+| Can the panel list a mod with nothing wrong?     | Yes, for the one press that asked about it. It leaves with it      |
+| Does a `flagged` mod hold up a launch?           | No. Only a repair on offer or a mod the game refuses does          |
 | Does the item draw when nothing was re-checked?  | Yes. It answers to the verdicts, not to the sweep                  |
 | Where does the item sit?                         | A cell at the right of the status bar                              |
 | Can a reader dismiss it?                         | No. It leaves when nothing is wrong any more                       |

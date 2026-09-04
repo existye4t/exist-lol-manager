@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier/flat";
+import i18next from "eslint-plugin-i18next";
 import reactPlugin from "eslint-plugin-react";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
@@ -47,6 +48,70 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/**/*.test.{ts,tsx}",
+      "src/test/**",
+      "src/lib/bindings/**",
+      "src/routeTree.gen.ts",
+    ],
+    plugins: { i18next },
+    languageOptions: {
+      parserOptions: {
+        // Type information lets the rule skip a literal whose type is a string union.
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "i18next/no-literal-string": [
+        "warn",
+        {
+          mode: "all",
+          "jsx-attributes": {
+            exclude: [
+              "className",
+              "data-ui",
+              "to",
+              "href",
+              "id",
+              "name",
+              "type",
+              "role",
+              "variant",
+              "size",
+              "weight",
+              "for",
+              "key",
+              "src",
+              "rel",
+              "target",
+            ],
+          },
+          callees: {
+            exclude: [
+              "invoke",
+              "listen",
+              "emit",
+              "useHotkeys",
+              "navigate",
+              "console\\..*",
+              "setProperty",
+              "removeProperty",
+              "querySelector",
+              "getElementById",
+            ],
+          },
+          "object-properties": {
+            exclude: ["to", "search", "key", "id", "className", "data-ui"],
+          },
+          // Ids, paths and class tokens: copy has a capital or a space.
+          words: { exclude: ["^[a-z0-9_./:-]+$"] },
+        },
+      ],
+    },
+  },
+  {
     files: ["scripts/**/*.mjs"],
     languageOptions: {
       globals: {
@@ -63,6 +128,7 @@ export default tseslint.config(
       "src-tauri/",
       "gen/",
       "prettier.config.js",
+      "src/paraglide/",
     ],
   },
   eslintConfigPrettier,

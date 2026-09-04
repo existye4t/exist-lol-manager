@@ -5,7 +5,7 @@ import { twMerge } from "tailwind-merge";
 import { AlertBox, Button, Checkbox, Dialog, Spinner, Tooltip, useToast } from "@/components";
 import type { LinkedBinOffenderInfo } from "@/lib/tauri";
 import { useInstalledMods, useLinkedBinOffenders, useToggleMod } from "@/modules/library";
-import { useLinkedBinGuardStore } from "@/stores";
+import { useLinkedBinGuardStore, useQueuedDialog } from "@/stores";
 
 import { usePatcherStatus } from "../api/usePatcherStatus";
 
@@ -20,9 +20,10 @@ import { usePatcherStatus } from "../api/usePatcherStatus";
 export function LinkedBinWarningDialog() {
   const open = useLinkedBinGuardStore((s) => s.open);
   const close = useLinkedBinGuardStore((s) => s.close);
+  const showing = useQueuedDialog("linked-bin-warning", open);
 
   // Mount the content (and its queries/mutations) only while open.
-  if (!open) return null;
+  if (!showing) return null;
 
   return <LinkedBinWarningContent onClose={close} />;
 }

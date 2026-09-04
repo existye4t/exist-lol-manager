@@ -2,6 +2,7 @@ import { Check, FolderOpen, Package, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import { Button, Dialog, IconButton, Progress, RadioGroup, Tooltip } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type PackFormat, type PackResult } from "@/lib/tauri";
 import { useWorkshopDialogsStore, useWorkshopSelectionStore } from "@/stores";
 
@@ -51,7 +52,7 @@ export function BulkPackDialog() {
         ? { displayName: projects[i].displayName, outcome: { ok: true, result: result.value } }
         : {
             displayName: projects[i].displayName,
-            outcome: { ok: false, error: result.error.message },
+            outcome: { ok: false, error: errorSummary(result.error) },
           };
 
       accumulated.push(item);

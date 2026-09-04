@@ -6,7 +6,7 @@ import {
   StackIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { twMerge } from "tailwind-merge";
 
 import {
@@ -36,11 +36,20 @@ import {
   useBrokenMods,
   useCancelModHealthRun,
   useInstalledMods,
+  useModHealthVerdicts,
   useRepairMod,
   useRepairMods,
   useRepairTargets,
 } from "../api";
-import { HEADLINE, type SweepTone, toneOf } from "./modHealthNotice";
+import {
+  alarmOf,
+  alarmOver,
+  HEADLINE,
+  NO_PROBLEMS,
+  type SweepAlarm,
+  type SweepTone,
+  toneOf,
+} from "./modHealthNotice";
 
 interface ModHealthSweepPanelProps {
   onClose: () => void;
@@ -65,6 +74,16 @@ export function ModHealthSweepPanel({ onClose }: ModHealthSweepPanelProps) {
   const { enabled } = useRepairTargets();
   const requested = useModHealthDrawerStore((s) => s.repairRequested);
   const takeRequest = useModHealthDrawerStore((s) => s.takeRepairRequest);
+  const focusModId = useModHealthDrawerStore((s) => s.focusModId);
+  const { data: verdicts } = useModHealthVerdicts();
+
+  /* A press about one mod is answered about that mod, so its row joins a list
+     the library-wide surfaces would have left it out of. */
+  const rows = useMemo(() => {
+    const focused = focusModId ? verdicts?.[focusModId] : undefined;
+    if (!focused || all.some((verdict) => verdict.modId === focused.modId)) return all;
+    return [...all, focused];
+  }, [all, focusModId, verdicts]);
 
   /* The launch guard's "Repair first" opens the panel and asks for the run in
      one press, and the run is this component's to start. */
@@ -74,8 +93,10 @@ export function ModHealthSweepPanel({ onClose }: ModHealthSweepPanelProps) {
     if (enabled.length > 0) repair.repair(enabled.map((verdict) => verdict.modId));
   }, [requested, enabled, repair, takeRequest]);
 
-  const tone = toneOf(repairable.length);
+  const alarm = alarmOver(all);
+  const tone = toneOf(alarm);
   const fixable = repairable.length > 0;
+  const headline = all.length > 0 ? HEADLINE : NO_PROBLEMS;
 
   return (
     <>
@@ -84,11 +105,11 @@ export function ModHealthSweepPanel({ onClose }: ModHealthSweepPanelProps) {
       <header
         className={`relative flex shrink-0 items-start gap-2.5 px-3 py-2.5 select-none ${tone.wash}`}
       >
-        <PanelMark fixable={fixable} tone={tone} />
+        <PanelMark alarm={alarm} tone={tone} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-medium text-surface-100">{HEADLINE}</h2>
+          <h2 className="truncate text-sm font-medium text-surface-100">{headline}</h2>
           <p className="text-xs text-surface-300">
-            <Recommendation repairable={repairable.length} unrepairable={unrepairable.length} />
+            <Recommendation repairable={repairable} unrepairable={unrepairable} />
           </p>
         </div>
         <IconButton
@@ -109,7 +130,7 @@ export function ModHealthSweepPanel({ onClose }: ModHealthSweepPanelProps) {
           DS-REPORT-PANEL. What a row is owed is its own severities, so it is
           marked on the row rather than said by a heading over a class of them. */}
       <div className="mx-2 my-2 min-h-0 flex-1 overflow-y-auto rounded-xl border border-surface-700 bg-surface-950/30 scrollbar-md">
-        <VerdictRows verdicts={all} />
+        <VerdictRows verdicts={rows} />
       </div>
 
       <PanelActions run={repair} fixable={fixable} onClose={onClose} />
@@ -121,11 +142,12 @@ export function ModHealthSweepPanel({ onClose }: ModHealthSweepPanelProps) {
  * The glyph the header is read from, at twice the size of a control's icon.
  *
  * The wolf carries its own amber rather than `currentColor`, and that amber is
- * the warning tone's. The poro is line art in one colour, so it takes the danger
- * tone a library no repair can reach is announced in.
+ * the warning tone's. The poro is line art in one colour, so it takes whichever
+ * hue the rung is announced in - red for a library that has to be replaced, grey
+ * for one that no repair reaches and nothing stops loading.
  */
-function PanelMark({ fixable, tone }: { fixable: boolean; tone: SweepTone }) {
-  if (fixable) return <WolfIcon className="h-10 w-10 shrink-0" />;
+function PanelMark({ alarm, tone }: { alarm: SweepAlarm; tone: SweepTone }) {
+  if (alarm === "repairable") return <WolfIcon className="h-10 w-10 shrink-0" />;
 
   return <ShockedPoroDuotoneIcon className={twMerge("h-10 w-10 shrink-0", tone.chip)} />;
 }
@@ -312,22 +334,33 @@ function repairingLabel(names: string[]) {
 /**
  * The line under the title, which is what the reader is being asked to do.
  *
- * Three states, because "repair these" and "go and find newer ones" are different
- * errands and a list can be either or both. The title says what was found, so
- * none of these repeat it.
+ * "Repair these", "go and find newer ones" and "leave them alone" are three
+ * different errands and a list can be any two of them, so the line answers both
+ * halves. The title says what was found, so none of these repeat it.
+ *
+ * Only a mod the game refuses is sent after an updated version. A mod that loads
+ * with a fault is one most people should keep and play, and telling that reader
+ * to go looking is what the flat red header used to do to all of them.
  */
 function Recommendation({
   repairable,
   unrepairable,
 }: {
-  repairable: number;
-  unrepairable: number;
+  repairable: ModHealthVerdict[];
+  unrepairable: ModHealthVerdict[];
 }) {
-  if (repairable === 0) {
-    return <>None of them are auto-fixable, so look for updated versions</>;
+  const replaceable = alarmOver(unrepairable) === "broken";
+
+  if (repairable.length + unrepairable.length === 0) {
+    return <>These findings are worth knowing, and none of them is a fault</>;
   }
 
-  if (unrepairable === 0) {
+  if (repairable.length === 0) {
+    if (replaceable) return <>None of them are auto-fixable, so look for updated versions</>;
+    return <>None of them are auto-fixable, though none of them stops a mod loading</>;
+  }
+
+  if (unrepairable.length === 0) {
     return (
       <>
         All of them can be repaired automatically, so{" "}
@@ -336,10 +369,19 @@ function Recommendation({
     );
   }
 
+  if (replaceable) {
+    return (
+      <>
+        <strong className="font-medium text-surface-200">Repairing is recommended</strong>, though
+        some will need updated versions instead
+      </>
+    );
+  }
+
   return (
     <>
-      <strong className="font-medium text-surface-200">Repairing is recommended</strong>, though
-      some will need updated versions instead
+      <strong className="font-medium text-surface-200">Repairing is recommended</strong>, and what
+      it misses will still load
     </>
   );
 }
@@ -390,16 +432,26 @@ const RANK: Record<ProblemSeverity, number> = { fatal: 0, error: 1, warning: 2, 
 function VerdictRow({ verdict }: { verdict: ModHealthVerdict }) {
   const { data: mods = [] } = useInstalledMods();
   const repair = useRepairMod();
-  const [open, setOpen] = useState(false);
+  const focused = useModHealthDrawerStore((s) => s.focusModId) === verdict.modId;
+  const [open, setOpen] = useState(focused);
+  const row = useRef<HTMLLIElement>(null);
   const mod = mods.find((candidate) => candidate.id === verdict.modId);
   const name = mod?.displayName ?? verdict.modId;
-  const fixable = verdict.health === "repairable";
+  const alarm = alarmOf(verdict);
+  const fixable = alarm === "repairable";
   /* A verdict recorded before briefs existed has nothing to unfold until its
      next check, and its row stays plain text. */
   const rules = verdict.rules ?? [];
 
+  /* Centred rather than merely in view: a row the reader was sent to has to be
+     found without reading the list to check. */
+  useEffect(() => {
+    if (!focused) return;
+    row.current?.scrollIntoView({ block: "center" });
+  }, [focused]);
+
   return (
-    <li className="text-row">
+    <li ref={row} className="text-row">
       <div className="group/row relative flex items-center gap-2 px-3 py-1.5 hover:bg-surface-veil-soft">
         <RowMark enabled={mod?.enabled ?? false} />
         {rules.length > 0 && (
@@ -452,9 +504,9 @@ function VerdictRow({ verdict }: { verdict: ModHealthVerdict }) {
         {/* The seat the press would be in. A reader asks why a row has none only
             at the moment they reach for it, so the sentence the group header
             used to hold over every such row is answered here instead. */}
-        {!fixable && (
+        {verdict.health !== "healthy" && alarm !== "repairable" && (
           <span className="absolute top-1/2 right-3 -translate-y-1/2 text-meta whitespace-nowrap text-surface-500 opacity-0 transition-opacity group-hover/row:opacity-100 group-has-[:focus-visible]/row:opacity-100">
-            Needs an updated version
+            {NO_PRESS[alarm]}
           </span>
         )}
       </div>
@@ -462,6 +514,18 @@ function VerdictRow({ verdict }: { verdict: ModHealthVerdict }) {
     </li>
   );
 }
+
+/**
+ * What a row with no press says in the seat the press would have taken.
+ *
+ * Only the mod the game refuses is sent after a replacement. The other one is
+ * being told what the press would not have done, and nothing more. A row with
+ * nothing wrong in it says neither, since it is missing no press.
+ */
+const NO_PRESS: Record<Exclude<SweepAlarm, "repairable">, string> = {
+  broken: "Needs an updated version",
+  flagged: "Not auto-fixable",
+};
 
 /** The row's package mark: the accent for a mod the next game carries, dim otherwise. */
 function RowMark({ enabled }: { enabled: boolean }) {

@@ -60,10 +60,8 @@ struct PublishedRevision {
     from: u32,
     /// The last build it describes, absent while it is the current one.
     to: Option<u32>,
-    /// Field type, key type, value type and key hash, in that order.
-    ///
-    /// Only the first is read. The rest describe what a container holds, which
-    /// is a level below the tag a bin writes for the property itself.
+    /// Field type, key type, value type and class hash, in that order. What
+    /// [`Shape`] reads.
     #[serde(default)]
     r#type: Vec<String>,
 }
@@ -107,7 +105,7 @@ struct Revision {
     to: Option<u32>,
     /// `None` for a type name this build does not map, which is a revision the
     /// lookup declines to answer rather than one it answers wrongly.
-    kind: Option<Kind>,
+    shape: Option<Shape>,
 }
 
 impl Revision {
@@ -120,6 +118,61 @@ impl Revision {
     }
 }
 
+/// What the database writes in a slot the type leaves empty.
+const EMPTY_SLOT: &str = "0x0";
+
+/// The type of one property, as the database writes it.
+///
+/// Flat, the way the file is: `[kind, key, value, class]`, with `EMPTY_SLOT`
+/// where the type has nothing to say. The class is not read, because a
+/// `Pointer` names a base class and holds any class derived from it, so the
+/// class a bin declares is no evidence of a mismatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shape {
+    /// The type itself, such as `Option` or `File`.
+    pub kind: Kind,
+    /// A `Map`'s key type.
+    pub key: Option<Kind>,
+    /// What an `Option`, a list or a `Map` holds.
+    pub value: Option<Kind>,
+}
+
+impl Shape {
+    /// The type naming nothing but a kind, as a leaf writes it.
+    #[must_use]
+    pub const fn bare(kind: Kind) -> Self {
+        Self {
+            kind,
+            key: None,
+            value: None,
+        }
+    }
+
+    /// Read the slots a revision writes, or `None` where the dumper could not
+    /// name one of them.
+    ///
+    /// A list writes its fixed size in the key slot, which is a count and not
+    /// a kind, so the key is read for a `Map` alone.
+    fn written(slots: &[String]) -> Option<Self> {
+        let slot = |index: usize| {
+            slots
+                .get(index)
+                .map(String::as_str)
+                .filter(|written| *written != EMPTY_SLOT)
+        };
+        let kind = kind_named(slot(0)?)?;
+        let key = match (kind, slot(1)) {
+            (Kind::Map, Some(written)) => Some(kind_named(written)?),
+            _ => None,
+        };
+        let value = match slot(2) {
+            Some(written) => Some(kind_named(written)?),
+            None => None,
+        };
+        Some(Self { kind, key, value })
+    }
+}
+
 /// What one property is, at one build.
 ///
 /// Borrowed rather than cloned: a walk asks this of every property of every
@@ -128,7 +181,7 @@ impl Revision {
 pub struct Expected<'a> {
     /// The type the game's registrar holds, absent where the database names a
     /// type this build cannot map.
-    pub kind: Option<Kind>,
+    pub shape: Option<Shape>,
     /// The class as the database names it.
     pub class_name: Option<&'a str>,
     /// The property as the database names it.
@@ -227,7 +280,7 @@ impl MetaSchema {
             .find(|revision| revision.covers(build.content()))?;
 
         Some(Expected {
-            kind: revision.kind,
+            shape: revision.shape,
             class_name: class_schema.name.as_deref(),
             field_name: property.name.as_deref(),
         })
@@ -271,7 +324,7 @@ impl From<PublishedProperty> for PropertySchema {
                 .map(|revision| Revision {
                     from: revision.from,
                     to: revision.to,
-                    kind: revision.r#type.first().and_then(|name| kind_named(name)),
+                    shape: Shape::written(&revision.r#type),
                 })
                 .collect(),
         }

@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
+import { errorSummary } from "@/i18n";
 import type { BulkInstallResult, CslolModInfo } from "@/lib/tauri";
 
 import { useImportCslolMods } from "./useImportCslolMods";
@@ -100,7 +101,7 @@ export function useMigrationWizard(onClose: () => void) {
     selectedFolders,
     importResult,
     progress,
-    scanError: scanMods.error?.message,
+    scanError: scanMods.error ? errorSummary(scanMods.error) : undefined,
     isScanning: scanMods.isPending,
     handleClose,
     handleBrowse,

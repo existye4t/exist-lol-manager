@@ -631,7 +631,7 @@ Nothing hard-blocks the first stage.
 
 | Item              | Where     | Status                                                 |
 | ----------------- | --------- | ------------------------------------------------------ |
-| `ltk_meta` 0.6.1  | crates.io | Published. `MIT OR Apache-2.0`, the workspace's        |
+| `ltk_meta` 0.6.1  | crates.io | Published. `MIT OR Apache-2.0`, GPL-compatible         |
 | `bin_tables()`    | This repo | A small addition to `hashtables.rs`                    |
 | `Bin::scan`       | Upstream  | Wanted by the object index, optional here              |
 | The write version | Upstream  | Read [The version-3 write](#the-version-3-write)       |
@@ -658,9 +658,8 @@ beside `SettingsState` and `PatcherState`.
 | `bin_undo`     | The same                                      |
 | `bin_close`    | Nothing                                       |
 
-Errors carry an `ErrorCode` and their context the way
-[error handling](../ERROR_HANDLING.md) describes, with the node address in the context of a
-rejected patch.
+Errors carry a `code` and typed fields the way [error handling](../ERROR_HANDLING.md) describes,
+with the node address as a field of a rejected patch.
 
 ## The frontend
 

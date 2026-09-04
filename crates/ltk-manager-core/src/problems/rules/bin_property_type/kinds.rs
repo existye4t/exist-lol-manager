@@ -15,10 +15,11 @@
 //! | `Embed`   | `Embedded`           | `0x83` |
 //! | `Option`  | `Optional`           | `0x85` |
 //! | `Map`     | `Map`                | `0x86` |
+//! | `Flag`    | `BitBool`            | `0x87` |
 //!
-//! A `Map` key is a primitive, so `I32`, `U32` and `U8` reach here too. They
-//! carry the name `ltk_meta` already writes for them and appear nowhere else in
-//! the table.
+//! A `Map` key is a primitive and a retype moves one, so `Bool`, `I32`, `U32`
+//! and `U8` reach here too, each under the name `ltk_meta` already writes for
+//! it.
 
 use ltk_meta::property::Kind;
 
@@ -36,6 +37,8 @@ const NAMES: &[(&str, Kind)] = &[
     ("Embed", Kind::Embedded),
     ("Option", Kind::Optional),
     ("Map", Kind::Map),
+    ("Flag", Kind::BitBool),
+    ("Bool", Kind::Bool),
     ("I32", Kind::I32),
     ("U32", Kind::U32),
     ("U8", Kind::U8),
@@ -75,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn the_nine_the_document_tabulates_map_the_way_it_says() {
+    fn every_tag_the_document_tabulates_maps_the_way_it_says() {
         assert_eq!(kind("String"), Some(Kind::String));
         assert_eq!(kind("Hash"), Some(Kind::Hash));
         assert_eq!(kind("File"), Some(Kind::WadChunkLink));
@@ -85,10 +88,12 @@ mod tests {
         assert_eq!(kind("Embed"), Some(Kind::Embedded));
         assert_eq!(kind("Option"), Some(Kind::Optional));
         assert_eq!(kind("Map"), Some(Kind::Map));
+        assert_eq!(kind("Flag"), Some(Kind::BitBool));
     }
 
     #[test]
-    fn the_primitives_a_map_key_uses_carry_their_own_names() {
+    fn the_primitives_the_table_names_carry_their_own_names() {
+        assert_eq!(kind("Bool"), Some(Kind::Bool));
         assert_eq!(kind("I32"), Some(Kind::I32));
         assert_eq!(kind("U32"), Some(Kind::U32));
         assert_eq!(kind("U8"), Some(Kind::U8));

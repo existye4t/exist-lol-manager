@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type LibraryRepairReport, type ModRepairProgress } from "@/lib/tauri";
 import { useTauriEvent } from "@/lib/useTauriEvent";
 import { hasErrorCode } from "@/utils/errors";
@@ -71,7 +72,7 @@ export function useRepairMods(): RepairRun {
         toast.error("Stop the patcher first", "A repair rewrites mods the overlay is reading.");
         return;
       }
-      toast.error(error.message ?? "Failed to repair mods");
+      toast.error("Failed to repair mods", errorSummary(error));
     },
   });
 

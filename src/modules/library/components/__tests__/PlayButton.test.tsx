@@ -87,7 +87,7 @@ function mockBackend({
         if (stopFails) {
           return Promise.resolve({
             ok: false,
-            error: { code: "PATCHER", message: "not running" },
+            error: { code: "PATCHER", error: { kind: "NOT_RUNNING" } },
           });
         }
         return Promise.resolve({ ok: true, value: null });

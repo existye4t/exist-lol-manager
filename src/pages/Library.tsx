@@ -86,7 +86,7 @@ export function Library({ folderId }: LibraryProps = {}) {
   function handleStopPatcher() {
     stopPatcher.mutate(undefined, {
       onError: (error) => {
-        console.error("Failed to stop patcher:", error.message);
+        console.error("Failed to stop patcher:", error);
       },
     });
   }

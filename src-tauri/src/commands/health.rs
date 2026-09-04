@@ -11,7 +11,9 @@ use crate::mods::{ModHealthVerdict, ModLibrary, ModLibraryState};
 use crate::patcher::PatcherState;
 use crate::state::SettingsState;
 use ltk_manager_core::config::Config;
-use ltk_manager_core::mods::{HealthCheckReadiness, HealthSweepState, LibraryRepairReport};
+use ltk_manager_core::mods::{
+    HealthCheckReadiness, HealthSweepReport, HealthSweepState, LibraryRepairReport, SweepScope,
+};
 use ltk_manager_core::problems::FixReport;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager, State};
@@ -28,6 +30,25 @@ pub async fn check_mod_health(
     };
 
     off_thread(move || library.check_mod_health(&config, &mod_id)).await
+}
+
+/// Re-check `mod_ids`, or every mod in the library where none are named.
+///
+/// The library's counterpart of one card's Check Health, so it takes the
+/// verdicts again whatever their basis says. Reports through the sweep's own
+/// progress events, which is what makes one run at a time the rule.
+#[tauri::command]
+pub async fn sweep_mod_health(
+    mod_ids: Option<Vec<String>>,
+    app_handle: AppHandle,
+) -> IpcResult<HealthSweepReport> {
+    let (config, library) = match library_setup(&app_handle, PatcherGuard::Allow) {
+        Ok(v) => v,
+        Err(e) => return IpcResult::from(Err::<HealthSweepReport, _>(e)),
+    };
+
+    let scope = mod_ids.map_or(SweepScope::All, SweepScope::Only);
+    off_thread(move || library.sweep_mod_health(&config, &scope)).await
 }
 
 /// Repair what a machine can repair in one mod.

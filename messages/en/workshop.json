@@ -1,0 +1,20 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "workshop.LAYER_FILE_CONFLICT.description": [
+    {
+      "declarations": [
+        "input names",
+        "input count",
+        "input more",
+        "local countPlural = count: plural"
+      ],
+      "selectors": ["more", "countPlural"],
+      "match": {
+        "more=0, countPlural=one": "{names} already exists in this layer.",
+        "more=0, countPlural=other": "{names} already exist in this layer.",
+        "more=*, countPlural=*": "{names} and {more} more already exist in this layer."
+      }
+    }
+  ],
+  "workshop.LAYER_FILE_CONFLICT.title": "Files already exist in this layer"
+}

@@ -1,14 +1,27 @@
+import { HeartbeatIcon } from "@phosphor-icons/react";
 import { Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 
 import { Button, Checkbox, IconButton, Tooltip, useToast } from "@/components";
-import type { InstalledMod } from "@/lib/tauri";
-import { useBulkUninstallMods, useInstalledMods } from "@/modules/library/api";
+import type { HealthCheckReadiness, InstalledMod } from "@/lib/tauri";
+import {
+  useBulkUninstallMods,
+  useHealthCheckReadiness,
+  useInstalledMods,
+  useSweepModHealth,
+} from "@/modules/library/api";
 import { usePatcherStatus } from "@/modules/patcher";
-import { useLibrarySelectionStore } from "@/stores";
+import { useLibrarySelectionStore, useModHealthDrawerStore } from "@/stores";
 
 import { BulkUninstallDialog } from "./BulkUninstallDialog";
+
+/** What the press will do, or what it is waiting on before it can. */
+const CHECK_HINTS: Record<HealthCheckReadiness, string> = {
+  ready: "Check the selected mods for problems",
+  syncing: "Syncing the hashtables a check needs. Try again in a moment.",
+  unsynced: "The hashtables a check needs are not synced. Sync them in Settings.",
+};
 
 interface SelectionActionBarProps {
   visibleMods: InstalledMod[];
@@ -26,11 +39,16 @@ export function SelectionActionBar({ visibleMods }: SelectionActionBarProps) {
   const patcherRunning = patcherStatus?.running ?? false;
 
   const bulkUninstall = useBulkUninstallMods();
+  const sweepHealth = useSweepModHealth();
+  const readiness = useHealthCheckReadiness();
   const toast = useToast();
 
   const { data: allMods = [] } = useInstalledMods();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  /* The health panel is a modal over this bar, so Escape there is its own way
+     out rather than the mode's, and Ctrl+A belongs to the list it is reading. */
+  const healthOpen = useModHealthDrawerStore((s) => s.open);
   // Snapshot of the mods to uninstall, frozen at confirm-dialog open so the optimistic
   // cache update (which empties the live selection mid-mutation) can't blank the preview.
   const [pendingMods, setPendingMods] = useState<InstalledMod[]>([]);
@@ -61,15 +79,16 @@ export function SelectionActionBar({ visibleMods }: SelectionActionBarProps) {
     setDialogOpen(false);
   }
 
-  useHotkeys("escape", () => exitSelectMode(), { enabled: !dialogOpen }, [dialogOpen]);
+  const modal = dialogOpen || healthOpen;
+  useHotkeys("escape", () => exitSelectMode(), { enabled: !modal }, [modal]);
   useHotkeys(
     "ctrl+a, meta+a",
     (e) => {
       e.preventDefault();
       addMany(visibleIds);
     },
-    { enabled: !dialogOpen, preventDefault: true },
-    [dialogOpen, visibleIds],
+    { enabled: !modal, preventDefault: true },
+    [modal, visibleIds],
   );
 
   async function handleConfirmUninstall() {
@@ -148,6 +167,26 @@ export function SelectionActionBar({ visibleMods }: SelectionActionBarProps) {
           </Button>
 
           <div className="mx-1 h-6 w-px bg-surface-700" />
+
+          <Tooltip content={CHECK_HINTS[readiness]}>
+            <Button
+              variant="outline"
+              size="sm"
+              /* The mode ends with the press, as the uninstall's does: the run
+                 answers over the library and the picks are spent. */
+              onClick={() =>
+                sweepHealth.mutate(
+                  selectedMods.map((m) => m.id),
+                  { onSuccess: exitSelectMode },
+                )
+              }
+              loading={sweepHealth.isPending}
+              disabled={selectedCount === 0 || readiness !== "ready"}
+              left={<HeartbeatIcon weight="bold" className="h-4 w-4" />}
+            >
+              Check health
+            </Button>
+          </Tooltip>
 
           <Button
             variant="danger"

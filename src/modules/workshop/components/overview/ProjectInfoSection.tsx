@@ -3,6 +3,7 @@ import { useState } from "react";
 import { twMerge } from "tailwind-merge";
 
 import { IconButton, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { WorkshopProject } from "@/lib/tauri";
 import { useRenameProject } from "@/modules/workshop";
 
@@ -35,7 +36,7 @@ export function ProjectInfoSection({ project, onRenamed }: ProjectInfoSectionPro
           onRenamed(renamed);
         },
         onError: (err) => {
-          toast.error(`Failed to rename: ${err.message}`);
+          toast.error(`Failed to rename: ${errorSummary(err)}`);
         },
       },
     );

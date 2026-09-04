@@ -1,17 +1,23 @@
-// Refreshes the embedded meta schema snapshot from the LTK Meta Wiki API.
+// Refreshes the embedded meta schema snapshot from the meta wiki's own
+// repository, rather than from the API that serves the same file.
 //
-// The comparison runs against /v1, a few hundred bytes carrying both halves of
-// what the snapshot records: dataset.fetchedAt against its hashSource.fetchedAt,
-// and dataset.latestBuild against its latest. The two move independently, so
-// both are compared, and agreement means the body would arrive unchanged.
-// Nothing is kept between runs.
+// The API sits behind Bot Fight Mode, which challenges a datacenter address and
+// cannot be excepted, so a release runner is refused - see
+// docs/research/meta-api-reachability-from-ci.md. The two are the same bytes,
+// and lol-meta-wiki is public, so reading the file directly is what makes this
+// work unattended. The runtime keeps reading the API: a user is not challenged,
+// and the API is the interface published for them.
+//
+// The database carries its own generation and reach, so it is fetched first and
+// compared afterwards. That costs a download the old two-request shape could
+// skip, and buys one source that cannot disagree with itself.
 //
 // The runtime cache's If-None-Match path is deliberately not repeated here. Its
 // tag comes back weak on the gzip GET and strong on HEAD, and a script holding
 // no state has no tag to send anyway.
 //
 // `--check` runs the comparison, writes nothing, and exits non-zero when the
-// snapshot is behind. `--force` downloads whatever the comparison says.
+// snapshot is behind. `--force` writes whatever the comparison says.
 
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -23,8 +29,7 @@ const crateSrc = join(repoRoot, "crates", "ltk-manager-core", "src");
 const snapshotPath = join(crateSrc, "meta_schema", "schema-snapshot.json.gz");
 const embedPath = join(crateSrc, "meta_schema.rs");
 
-const rootUrl = "https://meta-api.leaguetoolkit.dev/v1";
-const dbUrl = `${rootUrl}/db`;
+const dbUrl = "https://raw.githubusercontent.com/LeagueToolkit/lol-meta-wiki/main/db/meta.db.json";
 
 // A release job runs this unattended, so a stalled connection has to end the run
 // rather than the runner's own limit.
@@ -42,20 +47,16 @@ try {
 
 async function refresh() {
   const shipped = readShipped();
-  const published = parseJson(await getText(rootUrl), rootUrl);
-  const generation = published.dataset?.fetchedAt;
-  const reaches = published.dataset?.latestBuild;
-  if (typeof generation !== "string" || typeof reaches !== "number") {
-    fail(`${rootUrl} answered without a dataset to compare against.`);
-  }
+  const body = await getText(dbUrl);
+  const database = readDatabase(body);
 
-  const publishedAt = describe({ generation, latest: reaches });
-  const current = shipped?.generation === generation && shipped?.latest === reaches;
+  const current =
+    shipped?.generation === database.generation && shipped?.latest === database.latest;
 
   if (checkOnly) {
     if (!current) {
       fail(
-        `The snapshot is at ${describe(shipped)}, and the publisher is at ${publishedAt}. ` +
+        `The snapshot is at ${describe(shipped)}, and the publisher is at ${describe(database)}. ` +
           "Run `pnpm generate:meta-schema` and commit the result.",
       );
     }
@@ -64,21 +65,12 @@ async function refresh() {
   }
 
   if (current && !force) {
-    console.log(`The snapshot is current at ${describe(shipped)}, so nothing was downloaded.`);
+    console.log(`The snapshot is current at ${describe(shipped)}, so nothing was written.`);
     return;
   }
 
   // Written as it was served rather than re-serialized, so a diff of the
   // decompressed blob is a diff of the publisher's own JSON.
-  const body = await getText(dbUrl);
-  const database = readDatabase(body);
-
-  if (database.generation !== generation || database.latest !== reaches) {
-    console.warn(
-      `${rootUrl} named ${publishedAt} and the database carries ${describe(database)}, so the next run will download again.`,
-    );
-  }
-
   const compressed = gzipSync(Buffer.from(body), { level: 9 });
   const temporary = `${snapshotPath}.tmp`;
   writeFileSync(temporary, compressed);

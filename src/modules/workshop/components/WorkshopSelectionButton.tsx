@@ -84,7 +84,7 @@ export function WorkshopSelectionButton() {
       { projects: selected.map((p) => ({ path: p.path, displayName: p.displayName })) },
       {
         onSuccess: () => clear(),
-        onError: (err) => console.error("Failed to test projects:", err.message),
+        onError: (err) => console.error("Failed to test projects:", err),
       },
     );
   }

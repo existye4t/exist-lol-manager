@@ -48,7 +48,10 @@ pub enum IpcResult<T> {
 Serializes to:
 
 - Success: `{ "ok": true, "value": T }`
-- Error: `{ "ok": false, "error": { code, message, context } }`
+- Error: `{ "ok": false, "error": { code, ...fields } }`
+
+The error is a code and the typed fields the frontend translates over, never a sentence
+(ADR-0017). The frontend turns it into copy with `describeError` from `@/i18n`.
 
 ## Common Mistakes
 

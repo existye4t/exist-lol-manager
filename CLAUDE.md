@@ -25,8 +25,10 @@ pnpm dev:logged [ltk_overlay=debug]
 
 `pnpm generate:licenses` requires `cargo-about` on PATH, and its config is `about.toml`.
 
-`pnpm generate:meta-schema` reaches the LTK Meta Wiki API, and writes nothing when the embedded
-snapshot already matches what the publisher serves.
+`pnpm generate:meta-schema` reads the meta wiki's database out of its own repository rather than
+from the API that serves the same bytes, because the API challenges a CI runner and cannot be
+excepted - see `docs/research/meta-api-reachability-from-ci.md`. It writes nothing when the
+embedded snapshot already matches.
 
 ## Code Style
 
@@ -37,6 +39,13 @@ reader change this code and break something. An architectural decision - why the
 this way, why a hook is mounted here - passes. Why the _product_ behaves as it does fails,
 however true the sentence is. That belongs in `docs/ux/`, and repeating it here records one
 decision in two places that then drift apart.
+
+**A comment is smaller than the code it explains.** A doc comment longer than the function under it
+is the signal that the reason belongs in `docs/ux/` or an ADR with a citation left behind, or that
+the code already shows it. One line is the default and one line is what most symbols get. A second
+paragraph is for a decision the code cannot show, and it is a sentence or two rather than the case
+for it. Count the lines before committing: on a diff where the prose outweighs the statements, the
+prose is what is wrong.
 
 **No redundant comments.** Do not add inline comments that restate what the code already expresses. If the code is descriptive enough (clear variable names, well-known patterns like temp-file-then-rename, obvious API calls), leave it uncommented. This applies to AI-generated code and suggestions too - strip narration comments before committing. The same goes for what a symbol's own doc expresses: a call site that restates the constant or type it is using is writing that doc twice. Needing the explanation there usually means the code is in the wrong place - move it beside what it explains, and the comment stops being needed.
 
@@ -50,6 +59,23 @@ The same holds for a `docs/ux/` spec: name the section and the file and stop - a
 header or a module's exported entry point, never on a statement, and only where prose was removed.
 It is the receipt for what is no longer written there. Never a relative path, because the code
 moves and the doc does not.
+
+**A doc's first line names the thing, it does not narrate it.** One line, a noun phrase or a single
+declarative sentence, saying what the symbol _is_ - the same shape a commit subject takes, on the
+codebase's own vocabulary. No `Returns`, no `This function`, no restating the signature, and no
+walk through the body:
+
+```
+Bad   /** This function takes the verdicts and builds a string out of them. */
+Good  /** What is wrong with a library, as one string two runs compare by. */
+
+Bad   /** Called by the sweep's effect to decide whether it should announce. */
+Good  /** Claim the unprompted announcement `key` is owed, if it is owed one. */
+```
+
+Third person and the present tense throughout, on the domain's nouns rather than the
+implementation's - `the reader`, `a mod`, `the run` - and never `we` or `you`. Drop `note that`,
+`simply`, `just` and `basically`: a sentence that survives deleting them never needed them.
 
 **No semicolons splicing sentences,** in comments, doc comments, or markdown. They read as
 compressed notes rather than prose. Use a full stop when the halves are two thoughts, or a comma
@@ -132,3 +158,18 @@ labels. See `docs/agents/triage-labels.md`.
 
 Single-context, with one `CONTEXT.md` and one `docs/adr/` at the repo root. See
 `docs/agents/domain.md`.
+
+### CodeGraph
+
+In a checkout indexed by CodeGraph (`.codegraph/` at the repo root), the index reads the code but
+has blind spots:
+
+- The Tauri command boundary has no edge. `api.fooBar` in `src/lib/tauri.ts` invokes the string
+  `"foo_bar"`, which is the Rust command of that name registered in `src-tauri/src/main.rs`. An
+  explore query that names both sides (`fooBar foo_bar`) returns the whole flow.
+- A cross-language `calls` or `imports` edge is a name collision (Rust `.unwrap()` resolves to
+  `src/utils/result.ts`), unless the target is a ts-rs binding type. Qualified Rust names such as
+  `GameDir::resolve` keep callers exact.
+- `codegraph affected` sees no Rust tests, because they are inline `#[cfg(test)]` modules. Rust
+  test impact is `cargo test`, scoped with `-p` to the crate touched.
+- `docs/` is outside the index. The reasons in `docs/ux/` and `docs/adr/` are found by grep.

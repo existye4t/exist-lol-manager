@@ -44,7 +44,7 @@ pub use analysis::wad_reports::{ModWadReport, WadReportState};
 pub use archive::inspect::{ModpkgInfo, inspect_modpkg_file};
 pub use archive::migration::*;
 pub use archive::repair::{LibraryRepairReport, ModRepairFailure};
-pub use health::sweep::{HealthSweepReport, HealthSweepState};
+pub use health::sweep::{HealthSweepReport, HealthSweepState, SweepScope};
 #[cfg(debug_assertions)]
 pub use health::timing::{HealthTiming, ModTiming};
 pub use health::{HealthCheckBasis, HealthCheckReadiness, ModHealth, ModHealthVerdict};

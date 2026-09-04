@@ -207,7 +207,12 @@ export function WorkshopBar() {
       {/* Positioned against `main`, the one positioned ancestor above this, so
           the scrim covers the editor and leaves the title bar alone. */}
       {mode === "palette" && (
-        <div role="presentation" className="absolute inset-0 z-40 bg-scrim" onMouseDown={close} />
+        <div
+          role="presentation"
+          data-no-drag
+          className="absolute inset-0 z-40 bg-scrim"
+          onMouseDown={close}
+        />
       )}
 
       {project && <ProjectKeys />}
@@ -244,8 +249,10 @@ export function WorkshopBar() {
           />
         )}
 
+        {/* The toolbar above is a drag region, which takes an unmarked press
+            inside it as a window drag rather than as a scroll. */}
         {mode === "palette" && (
-          <div className="absolute inset-x-0 top-0 z-50">
+          <div data-no-drag className="absolute inset-x-0 top-0 z-50">
             <PaletteBranch {...branch} />
           </div>
         )}

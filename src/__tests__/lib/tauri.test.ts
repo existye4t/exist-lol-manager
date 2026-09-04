@@ -147,12 +147,12 @@ describe("api", () => {
     it("wraps IPC error responses into Result Err", async () => {
       mockInvoke.mockResolvedValue({
         ok: false,
-        error: { code: "MOD_NOT_FOUND", message: "Not found" },
+        error: { code: "MOD_NOT_FOUND", modId: "x" },
       });
       const result = await api.getInstalledMods();
       expect(result).toEqual({
         ok: false,
-        error: { code: "MOD_NOT_FOUND", message: "Not found" },
+        error: { code: "MOD_NOT_FOUND", modId: "x" },
       });
     });
   });

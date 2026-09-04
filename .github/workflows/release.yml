@@ -87,6 +87,44 @@ jobs:
           config: cliff.toml
           args: --latest --strip header
 
+      # A release body is read by whoever installs the build, and a commit
+      # subject is written in the codebase's own vocabulary. `docs/releases/`
+      # is where the first is said, and the generated commit list stands in
+      # only for a release nobody wrote notes for.
+      - name: Compose release notes
+        id: notes
+        shell: bash
+        env:
+          GENERATED: ${{ steps.changelog.outputs.content }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          REPO="https://github.com/LeagueToolkit/ltk-manager"
+          MSI="LTK.Manager_${VERSION}_x64_en-US.msi"
+          WRITTEN="docs/releases/$VERSION.md"
+
+          if [ -f "$WRITTEN" ]; then
+            BODY=$(cat "$WRITTEN")
+          else
+            echo "::warning::No $WRITTEN. Falling back to the generated commit list."
+            BODY="$GENERATED"
+          fi
+
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "👉 **Download** [\`$MSI\`]($REPO/releases/download/$TAG/$MSI)"
+            echo
+            echo "## [$VERSION]($REPO/releases/tag/$TAG) - $(date -u +%Y-%m-%d)"
+            echo
+            printf '%s\n' "$BODY"
+          } > "$NOTES"
+
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            cat "$NOTES"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -176,7 +214,7 @@ jobs:
         with:
           tagName: ${{ steps.version.outputs.tag }}
           releaseName: "LTK Manager v${{ steps.version.outputs.version }}"
-          releaseBody: ${{ steps.changelog.outputs.content }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ steps.version.outputs.prerelease }}
           updaterJsonPreferNsis: true

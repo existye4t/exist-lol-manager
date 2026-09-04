@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useState } from "react";
 
 import { Button, Dialog, TextareaField } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { DecodedIncident } from "@/lib/tauri";
 import { SCAN_STATUS_LABELS } from "@/modules/patcher";
 
@@ -80,7 +81,7 @@ export function TokenDecoder({ open, onOpenChange }: TokenDecoderProps) {
               <span className="flex-1">
                 {decode.error && (
                   <p role="alert" className="text-xs text-danger-text">
-                    {decode.error.message}
+                    {errorSummary(decode.error)}
                   </p>
                 )}
               </span>

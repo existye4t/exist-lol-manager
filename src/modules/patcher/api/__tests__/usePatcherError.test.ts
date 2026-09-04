@@ -2,45 +2,23 @@
 
 import { describe, expect, it } from "vitest";
 
+import { m } from "@/i18n";
 import type { AppError, OverlayErrorCategory } from "@/lib/tauri";
-import { getOverlayErrorCategory } from "@/utils/errors";
 
 import { classifyPatcherError } from "../usePatcherError";
 
-function overlayError(category: OverlayErrorCategory, message = "build failed"): AppError {
-  return { code: "OVERLAY", message, context: { category } };
+function overlayError(category: OverlayErrorCategory, detail = "build failed"): AppError {
+  return { code: "OVERLAY", category, detail };
 }
 
-describe("getOverlayErrorCategory", () => {
-  it("reads the category off an OVERLAY error", () => {
-    expect(getOverlayErrorCategory(overlayError("GAME_DIR"))).toBe("GAME_DIR");
-  });
-
-  it("rejects other codes even when a category-shaped context rides along", () => {
-    const error: AppError = { code: "UNKNOWN", message: "x", context: { category: "GAME_DIR" } };
-    expect(getOverlayErrorCategory(error)).toBeUndefined();
-  });
-
-  it("rejects a category it has never heard of", () => {
-    const error: AppError = {
-      code: "OVERLAY",
-      message: "x",
-      context: { category: "SOMETHING_NEW" },
-    };
-    expect(getOverlayErrorCategory(error)).toBeUndefined();
-  });
-});
-
 describe("classifyPatcherError", () => {
-  // The categories exist so a wrong game dir does not read as a broken mod -
-  // each must surface under its own title.
   it.each([
-    ["GAME_DIR", "Game Install Problem"],
-    ["MOD_CONTENT", "Mod Content Problem"],
-    ["WAD_LIMIT", "Mod Too Large"],
-    ["CORRUPT", "Corrupt Game Files"],
-    ["BUG", "Overlay Builder Bug"],
-    ["OTHER", "Overlay Build Failure"],
+    ["GAME_DIR", m["error.OVERLAY.GAME_DIR.title"]()],
+    ["MOD_CONTENT", m["error.OVERLAY.MOD_CONTENT.title"]()],
+    ["WAD_LIMIT", m["error.OVERLAY.WAD_LIMIT.title"]()],
+    ["CORRUPT", m["error.OVERLAY.CORRUPT.title"]()],
+    ["BUG", m["error.OVERLAY.BUG.title"]()],
+    ["OTHER", m["error.OVERLAY.title"]()],
   ] as [OverlayErrorCategory, string][])("titles a %s failure", (category, title) => {
     expect(classifyPatcherError(overlayError(category, "chunk mismatch"))).toEqual({
       stage: "BUILD",
@@ -50,13 +28,22 @@ describe("classifyPatcherError", () => {
   });
 
   it("leaves a categoryless build failure to the stage's own title", () => {
-    expect(classifyPatcherError({ code: "UNKNOWN", message: "x" })).toEqual({
+    expect(classifyPatcherError({ code: "UNKNOWN", detail: "x" })).toEqual({
       stage: "BUILD",
       message: "x",
     });
   });
 
+  it("keeps an injection failure's stage and reason", () => {
+    expect(
+      classifyPatcherError({
+        code: "PATCHER",
+        error: { kind: "INJECTION_FAILED", stage: "HOST", message: "host died" },
+      }),
+    ).toEqual({ stage: "HOST", message: "host died" });
+  });
+
   it("treats a patcher refusal as no failed start", () => {
-    expect(classifyPatcherError({ code: "PATCHER", message: "busy" })).toBeNull();
+    expect(classifyPatcherError({ code: "PATCHER", error: { kind: "BUSY" } })).toBeNull();
   });
 });

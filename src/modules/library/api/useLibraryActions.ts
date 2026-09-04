@@ -2,6 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type BulkInstallResult, type InstalledMod, unwrap } from "@/lib/tauri";
 import { checkModForSkinhack } from "@/modules/library/utils/skinhackCheck";
 
@@ -43,7 +44,7 @@ export function useLibraryActions() {
     if (filePaths.length === 1) {
       installMod.mutate(filePaths[0], {
         onError: (error) => {
-          console.error("Failed to install mod:", error.message);
+          console.error("Failed to install mod:", error);
         },
       });
     } else if (filePaths.length > 1) {
@@ -57,7 +58,7 @@ export function useLibraryActions() {
     if (filePaths.length === 1) {
       installMod.mutate(filePaths[0], {
         onError: (error) => {
-          console.error("Failed to install mod:", error.message);
+          console.error("Failed to install mod:", error);
         },
       });
       return;
@@ -96,7 +97,7 @@ export function useLibraryActions() {
       },
       onError: (error) => {
         handleCloseImportDialog();
-        toast.error("Import failed", error.message);
+        toast.error("Import failed", errorSummary(error));
       },
     });
   }
@@ -112,7 +113,7 @@ export function useLibraryActions() {
       { modId, enabled },
       {
         onError: (error) => {
-          console.error("Failed to toggle mod:", error.message);
+          console.error("Failed to toggle mod:", error);
         },
       },
     );
@@ -127,7 +128,7 @@ export function useLibraryActions() {
         { modId: mod.id, enabled },
         {
           onError: (error) => {
-            console.error("Failed to toggle mod:", error.message);
+            console.error("Failed to toggle mod:", error);
           },
         },
       );
@@ -137,7 +138,7 @@ export function useLibraryActions() {
   function handleUninstallMod(modId: string) {
     uninstallMod.mutate(modId, {
       onError: (error) => {
-        console.error("Failed to uninstall mod:", error.message);
+        console.error("Failed to uninstall mod:", error);
       },
     });
   }

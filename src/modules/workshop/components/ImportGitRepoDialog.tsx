@@ -46,7 +46,7 @@ export function ImportGitRepoDialog() {
             form.reset();
             closeDialog();
           },
-          onError: (err) => console.error("Failed to import from git repo:", err.message),
+          onError: (err) => console.error("Failed to import from git repo:", err),
         },
       );
     },

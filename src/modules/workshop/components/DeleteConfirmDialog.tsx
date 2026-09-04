@@ -21,7 +21,7 @@ export function DeleteConfirmDialog() {
         closeDialog();
         navigate({ to: "/workshop" });
       },
-      onError: (err) => console.error("Failed to delete project:", err.message),
+      onError: (err) => console.error("Failed to delete project:", err),
     });
   }
 

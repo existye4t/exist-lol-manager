@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type AssetRef } from "@/lib/tauri";
 import { queryFn, unwrapForQuery } from "@/utils/query";
 
@@ -41,6 +42,6 @@ export function useOpenInRitobin() {
   return useMutation<void, AppError, OpenInRitobinArgs>({
     mutationFn: async ({ asset, name }) =>
       unwrapForQuery(await api.openAssetInRitobin(asset, name)),
-    onError: (error) => toast.error("Couldn't open in VS Code", error.message),
+    onError: (error) => toast.error("Couldn't open in VS Code", errorSummary(error)),
   });
 }

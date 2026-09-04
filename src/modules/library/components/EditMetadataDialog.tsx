@@ -5,6 +5,7 @@ import { Edit3, Image, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AutoPill, Button, Dialog, FormField, MultiSelect, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { InstalledMod } from "@/lib/tauri";
 import { libraryKeys } from "@/modules/library/api/keys";
 import { useEditMod } from "@/modules/library/api/useEditMod";
@@ -174,7 +175,7 @@ export function EditMetadataDialog({ mod, open, onOpenChange }: EditMetadataDial
           onOpenChange(false);
         },
         onError: (error) => {
-          toast.error("Failed to update metadata", error.message);
+          toast.error("Failed to update metadata", errorSummary(error));
         },
       },
     );

@@ -44,7 +44,7 @@ export function useProjectImports(): ProjectImports {
 
     peek(file, {
       onSuccess: (result) => openFantomeImportDialog(result, file),
-      onError: (err) => console.error("Failed to peek fantome:", err.message),
+      onError: (err) => console.error("Failed to peek fantome:", err),
     });
   }, [openFantomeImportDialog, peek]);
 
@@ -56,7 +56,7 @@ export function useProjectImports(): ProjectImports {
     if (!file) return;
 
     importModpkg(file, {
-      onError: (err) => console.error("Failed to import modpkg:", err.message),
+      onError: (err) => console.error("Failed to import modpkg:", err),
     });
   }, [importModpkg]);
 

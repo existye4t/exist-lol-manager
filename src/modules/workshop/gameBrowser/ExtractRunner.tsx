@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { type ToastData, useToast, useToastManager } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type ExtractProgress, type ExtractSummary } from "@/lib/tauri";
 import { type ExtractRequest, useExtractRunStore } from "@/stores";
 import { formatBytes } from "@/utils";
@@ -92,7 +93,9 @@ export function ExtractRunner() {
         },
         onError: (e) => {
           dismissBar();
-          error(req.intoLayer ? "Copy failed" : "Extract failed", e.message, { notify: true });
+          error(req.intoLayer ? "Copy failed" : "Extract failed", errorSummary(e), {
+            notify: true,
+          });
         },
         onSettled: () => {
           setRunning(false);

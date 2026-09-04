@@ -37,6 +37,7 @@ import {
 } from "@/modules/library/api";
 import { getMapLabel, getTagLabel } from "@/modules/library/utils/labels";
 import { useSettings } from "@/modules/settings";
+import { useModHealthDrawerStore } from "@/stores";
 
 import type { ModCardView } from "./useModCardController";
 
@@ -323,6 +324,7 @@ function ModCardMenuItems({ view }: { view: ModCardView }) {
 export function ModCardHealthItem({ modId }: { modId: string }) {
   const readiness = useHealthCheckReadiness();
   const checkModHealth = useCheckModHealth();
+  const showMod = useModHealthDrawerStore((s) => s.showMod);
   const toast = useToast();
 
   if (readiness === "syncing") {
@@ -351,14 +353,15 @@ export function ModCardHealthItem({ modId }: { modId: string }) {
           verdict.counts.errors +
           verdict.counts.warnings +
           verdict.counts.infos;
-        /* A healthy mod can still hold informative findings, and telling
-           somebody who just asked that nothing was found would be wrong. */
+        /* A healthy mod can still hold informative findings, and a count in a
+           toast is the one answer that names them without showing them. The
+           panel is where a finding is read, so the press opens it there. */
         if (verdict.health === "healthy") {
           if (total === 0) {
             toast.success("No problems found");
             return;
           }
-          toast.info(`${total} finding${total === 1 ? "" : "s"}, nothing wrong`);
+          showMod(modId);
           return;
         }
         if (verdict.health === "repairable") {

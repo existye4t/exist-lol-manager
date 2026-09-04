@@ -1,138 +1,116 @@
-//! Unit tests for the error codes, the response payload and the IPC envelope.
+//! Unit tests for the response payload's wire shape and the IPC envelope.
 
 use super::*;
 use ltk_manager_core::hashtables::{HashtableError, SyncHolder};
-use ltk_manager_core::launcher::LauncherError;
 use ltk_manager_core::patcher::injector::InjectorError;
 use ltk_manager_core::patcher::session::SessionError;
-use ltk_manager_core::patcher::{InjectionStage, PatcherError};
+use ltk_manager_core::patcher::InjectionStage;
+use serde_json::Value;
 
-#[test]
-fn error_code_serializes_as_screaming_snake_case() {
-    assert_eq!(serde_json::to_string(&ErrorCode::Io).unwrap(), "\"IO\"");
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::LeagueNotFound).unwrap(),
-        "\"LEAGUE_NOT_FOUND\""
-    );
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::ModNotFound).unwrap(),
-        "\"MOD_NOT_FOUND\""
-    );
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::InvalidPath).unwrap(),
-        "\"INVALID_PATH\""
-    );
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::WorkshopNotConfigured).unwrap(),
-        "\"WORKSHOP_NOT_CONFIGURED\""
-    );
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::ProjectAlreadyExists).unwrap(),
-        "\"PROJECT_ALREADY_EXISTS\""
-    );
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::Patcher).unwrap(),
-        "\"PATCHER\""
-    );
-    assert_eq!(
-        serde_json::to_string(&ErrorCode::Hashtable).unwrap(),
-        "\"HASHTABLE\""
-    );
-}
-
-/// Every hashtable failure shares one code, and the message says which.
-/// `HashtableError` is not `Serialize`, so the message is the only place
-/// the detail can ride.
-#[test]
-fn every_hashtable_failure_shares_one_code() {
-    let resp: AppErrorResponse =
-        AppError::Hashtable(HashtableError::SyncLocked(SyncHolder::unknown())).into();
-    assert_eq!(resp.code, ErrorCode::Hashtable);
-    assert!(resp.message.contains("already syncing"));
+fn wire(error: AppError) -> Value {
+    serde_json::to_value(AppErrorResponse::from(error)).unwrap()
 }
 
 #[test]
-fn error_code_round_trips() {
-    for code in [
-        ErrorCode::Io,
-        ErrorCode::Serialization,
-        ErrorCode::Modpkg,
-        ErrorCode::LeagueNotFound,
-        ErrorCode::InvalidPath,
-        ErrorCode::ModNotFound,
-        ErrorCode::ValidationFailed,
-        ErrorCode::InternalState,
-        ErrorCode::MutexLockFailed,
-        ErrorCode::Unknown,
-        ErrorCode::WorkshopNotConfigured,
-        ErrorCode::ProjectNotFound,
-        ErrorCode::ProjectAlreadyExists,
-        ErrorCode::PackFailed,
-        ErrorCode::Fantome,
-        ErrorCode::Wad,
-        ErrorCode::Patcher,
-        ErrorCode::Zip,
-        ErrorCode::SchemaVersionTooNew,
-        ErrorCode::Workshop,
-        ErrorCode::Launcher,
-        ErrorCode::Hashtable,
-        ErrorCode::Preview,
-        ErrorCode::Overlay,
+fn the_code_is_the_variant_in_screaming_snake_case() {
+    assert_eq!(wire(AppError::LeagueNotFound)["code"], "LEAGUE_NOT_FOUND");
+    assert_eq!(
+        wire(AppError::WorkshopNotConfigured)["code"],
+        "WORKSHOP_NOT_CONFIGURED"
+    );
+    assert_eq!(
+        wire(AppError::ProjectAlreadyExists("x".into()))["code"],
+        "PROJECT_ALREADY_EXISTS"
+    );
+    assert_eq!(wire(AppError::Other("x".into()))["code"], "UNKNOWN");
+    assert_eq!(
+        wire(AppError::Patcher(PatcherError::Busy))["code"],
+        "PATCHER"
+    );
+}
+
+/// A variant with nothing to translate over is only its code, so the
+/// frontend never sees a `detail` it would have to explain away.
+#[test]
+fn a_unit_variant_carries_only_its_code() {
+    for error in [
+        AppError::LeagueNotFound,
+        AppError::MutexLockFailed,
+        AppError::WorkshopNotConfigured,
     ] {
-        let json = serde_json::to_string(&code).unwrap();
-        let deserialized: ErrorCode = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized, code);
+        let json = wire(error);
+        assert_eq!(json.as_object().unwrap().len(), 1, "{json}");
     }
 }
 
+/// Prose from outside the app travels as `detail`, never as the message.
 #[test]
-fn app_error_response_new() {
-    let resp = AppErrorResponse::new(ErrorCode::Io, "disk full");
-    assert_eq!(resp.code, ErrorCode::Io);
-    assert_eq!(resp.message, "disk full");
-    assert!(resp.context.is_none());
+fn an_outside_error_rides_as_detail() {
+    let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "disk full");
+    let json = wire(AppError::Io(io));
+    assert_eq!(json["code"], "IO");
+    assert_eq!(json["detail"], "disk full");
+    assert!(json.get("message").is_none());
 }
 
 #[test]
-fn app_error_response_with_context() {
-    let resp = AppErrorResponse::new(ErrorCode::InvalidPath, "bad path")
-        .with_context(serde_json::json!({ "path": "/foo" }));
-    assert_eq!(resp.context.unwrap()["path"], "/foo");
+fn a_free_text_variant_rides_as_detail() {
+    assert_eq!(
+        wire(AppError::ValidationFailed("Name is empty".into()))["detail"],
+        "Name is empty"
+    );
+    assert_eq!(wire(AppError::Other("oops".into()))["detail"], "oops");
+    assert_eq!(
+        wire(AppError::PackFailed("no layers".into()))["detail"],
+        "no layers"
+    );
 }
 
 #[test]
-fn app_error_to_response_invalid_path_preserves_context() {
-    let error = AppError::InvalidPath("/bad/path".to_string());
-    let resp: AppErrorResponse = error.into();
-    assert_eq!(resp.code, ErrorCode::InvalidPath);
-    assert_eq!(resp.context.unwrap()["path"], "/bad/path");
+fn invalid_path_carries_the_path() {
+    let json = wire(AppError::InvalidPath("/bad/path".into()));
+    assert_eq!(json["code"], "INVALID_PATH");
+    assert_eq!(json["path"], "/bad/path");
 }
 
 #[test]
-fn app_error_to_response_mod_not_found_preserves_context() {
-    let error = AppError::ModNotFound("mod123".to_string());
-    let resp: AppErrorResponse = error.into();
-    assert_eq!(resp.code, ErrorCode::ModNotFound);
-    assert_eq!(resp.context.unwrap()["modId"], "mod123");
+fn mod_not_found_carries_the_mod_id() {
+    let json = wire(AppError::ModNotFound("mod123".into()));
+    assert_eq!(json["code"], "MOD_NOT_FOUND");
+    assert_eq!(json["modId"], "mod123");
 }
 
 #[test]
-fn app_error_to_response_project_not_found_preserves_context() {
-    let error = AppError::ProjectNotFound("my-project".to_string());
-    let resp: AppErrorResponse = error.into();
-    assert_eq!(resp.code, ErrorCode::ProjectNotFound);
-    assert_eq!(resp.context.unwrap()["projectName"], "my-project");
+fn project_not_found_carries_the_project_name() {
+    let json = wire(AppError::ProjectNotFound("my-project".into()));
+    assert_eq!(json["code"], "PROJECT_NOT_FOUND");
+    assert_eq!(json["projectName"], "my-project");
 }
 
 #[test]
-fn app_error_to_response_patcher_carries_the_variant_in_context() {
-    let resp: AppErrorResponse = AppError::Patcher(PatcherError::Busy).into();
-    assert_eq!(resp.code, ErrorCode::Patcher);
-    assert_eq!(resp.context.unwrap()["kind"], "BUSY");
+fn schema_version_too_new_carries_both_versions() {
+    let json = wire(AppError::SchemaVersionTooNew {
+        file_version: 4,
+        max_supported: 3,
+    });
+    assert_eq!(json["code"], "SCHEMA_VERSION_TOO_NEW");
+    assert_eq!(json["fileVersion"], 4);
+    assert_eq!(json["maxSupported"], 3);
 }
 
-/// Every patcher failure shares one code, so `context.kind` is the only
-/// thing separating them - it must survive the mapping for each variant.
+/// Every hashtable failure shares one code. `HashtableError` is not
+/// `Serialize`, so the detail is the only place its own words can ride.
+#[test]
+fn every_hashtable_failure_shares_one_code() {
+    let json = wire(AppError::Hashtable(HashtableError::SyncLocked(
+        SyncHolder::unknown(),
+    )));
+    assert_eq!(json["code"], "HASHTABLE");
+    assert!(json["detail"].as_str().unwrap().contains("already syncing"));
+}
+
+/// Every patcher failure shares one code, so the nested `kind` is the only
+/// thing separating them. It must survive the mapping for each variant.
 #[test]
 fn every_patcher_variant_reaches_the_frontend_distinguishable() {
     let kinds = [
@@ -149,29 +127,29 @@ fn every_patcher_variant_reaches_the_frontend_distinguishable() {
         ),
     ];
     for (error, expected) in kinds {
-        let resp: AppErrorResponse = AppError::Patcher(error).into();
-        assert_eq!(resp.code, ErrorCode::Patcher);
-        assert_eq!(resp.context.unwrap()["kind"], expected);
+        let json = wire(AppError::Patcher(error));
+        assert_eq!(json["code"], "PATCHER");
+        assert_eq!(json["error"]["kind"], expected);
     }
 }
 
 #[test]
-fn injection_failure_context_keeps_the_stage_and_the_reason() {
+fn an_injection_failure_keeps_the_stage_and_the_reason() {
     let error = PatcherError::from(SessionError::Injector(InjectorError::Failed(
         "DLL never attached after 60s".to_string(),
     )));
-    let resp: AppErrorResponse = AppError::Patcher(error).into();
+    let json = wire(AppError::Patcher(error));
 
-    assert!(resp.message.contains("DLL never attached"));
-    let context = resp.context.unwrap();
-    assert_eq!(context["kind"], "INJECTION_FAILED");
-    assert_eq!(context["stage"], "INJECTION");
+    assert_eq!(json["error"]["kind"], "INJECTION_FAILED");
+    assert_eq!(json["error"]["stage"], "INJECTION");
+    assert!(json["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("DLL never attached"));
 }
 
-/// Each launcher failure has its own remedy in the UI, and the context is
-/// what tells them apart. One code per variant put the discriminant on the
-/// wire twice, and lossily - two variants shared `LAUNCH_FAILED`, which the
-/// context distinguishes.
+/// Each launcher failure has its own remedy in the UI, and the nested `kind`
+/// is what tells them apart.
 #[test]
 fn every_launcher_variant_shares_one_code_and_keeps_its_kind() {
     let cases = [
@@ -217,75 +195,37 @@ fn every_launcher_variant_shares_one_code_and_keeps_its_kind() {
     ];
 
     for (error, expected_kind) in cases {
-        let resp: AppErrorResponse = AppError::Launcher(error).into();
-        assert_eq!(resp.code, ErrorCode::Launcher);
-        assert_eq!(
-            resp.context.expect("a launcher context")["kind"],
-            expected_kind
-        );
+        let json = wire(AppError::Launcher(error));
+        assert_eq!(json["code"], "LAUNCHER");
+        assert_eq!(json["error"]["kind"], expected_kind);
     }
 }
 
 #[test]
 fn riot_client_not_found_carries_the_path_it_tried() {
-    let resp: AppErrorResponse = AppError::Launcher(LauncherError::RiotClientNotFound {
+    let json = wire(AppError::Launcher(LauncherError::RiotClientNotFound {
         installs_path: "C:/ProgramData/Riot Games/RiotClientInstalls.json".to_string(),
-    })
-    .into();
+    }));
 
-    let context = resp.context.unwrap();
-    assert_eq!(context["kind"], "RIOT_CLIENT_NOT_FOUND");
+    assert_eq!(json["error"]["kind"], "RIOT_CLIENT_NOT_FOUND");
     assert_eq!(
-        context["installsPath"],
+        json["error"]["installsPath"],
         "C:/ProgramData/Riot Games/RiotClientInstalls.json"
     );
 }
 
 #[test]
-fn ipc_result_ok_serialization() {
-    let result: IpcResult<String> = IpcResult::ok("hello".to_string());
-    let json = serde_json::to_value(&result).unwrap();
-    assert_eq!(json["ok"], true);
-    assert_eq!(json["value"], "hello");
-}
-
-#[test]
-fn ipc_result_err_serialization() {
-    let resp = AppErrorResponse::new(ErrorCode::Io, "disk full");
-    let result: IpcResult<String> = IpcResult::err(resp);
-    let json = serde_json::to_value(&result).unwrap();
-    assert_eq!(json["ok"], false);
-    assert_eq!(json["error"]["code"], "IO");
-    assert_eq!(json["error"]["message"], "disk full");
-}
-
-#[test]
-fn ipc_result_from_ok() {
-    let result: IpcResult<i32> = Ok::<i32, AppErrorResponse>(42).into();
-    let json = serde_json::to_value(&result).unwrap();
-    assert_eq!(json["ok"], true);
-    assert_eq!(json["value"], 42);
-}
-
-#[test]
-fn ipc_result_from_err() {
-    let err = AppErrorResponse::new(ErrorCode::Unknown, "oops");
-    let result: IpcResult<i32> = Err::<i32, AppErrorResponse>(err).into();
-    let json = serde_json::to_value(&result).unwrap();
-    assert_eq!(json["ok"], false);
-    assert_eq!(json["error"]["code"], "UNKNOWN");
-}
-
-#[test]
-fn app_error_response_context_skipped_when_none() {
-    let resp = AppErrorResponse::new(ErrorCode::Io, "err");
-    let json = serde_json::to_value(&resp).unwrap();
-    assert!(json.get("context").is_none());
+fn a_workshop_error_travels_whole() {
+    let json = wire(AppError::Workshop(WorkshopError::LayerFileConflict {
+        conflicts: vec!["a.bin".into(), "b.bin".into()],
+    }));
+    assert_eq!(json["code"], "WORKSHOP");
+    assert_eq!(json["error"]["kind"], "LAYER_FILE_CONFLICT");
+    assert_eq!(json["error"]["conflicts"][1], "b.bin");
 }
 
 /// The overlay's failure categories exist so the frontend can branch on the
-/// remedy - fix the game dir, blame a mod, split a mod, report a bug - and
-/// `context.category` is where each must land.
+/// remedy: fix the game dir, blame a mod, split a mod, report a bug.
 #[test]
 fn every_overlay_category_reaches_the_frontend_distinguishable() {
     use ltk_overlay::{CorruptionError, GameDirError, Invariant, ModContentError, WadLimitError};
@@ -327,29 +267,95 @@ fn every_overlay_category_reaches_the_frontend_distinguishable() {
     ];
 
     for (error, expected_category) in cases {
-        let resp: AppErrorResponse = AppError::Overlay(error).into();
-        assert_eq!(resp.code, ErrorCode::Overlay);
-        assert_eq!(
-            resp.context.expect("an overlay context")["category"],
-            expected_category
-        );
+        let json = wire(AppError::Overlay(error));
+        assert_eq!(json["code"], "OVERLAY");
+        assert_eq!(json["category"], expected_category);
     }
 }
 
-/// The category names the remedy, but the user still reads the message, so
-/// the detail's own words must survive the mapping.
+/// The category names the remedy, but the user still reads the detail, so
+/// its own words must survive the mapping.
 #[test]
-fn overlay_response_message_carries_the_detail() {
+fn an_overlay_detail_carries_the_words() {
     use ltk_overlay::GameDirError;
 
-    let resp: AppErrorResponse = AppError::Overlay(
+    let json = wire(AppError::Overlay(
         GameDirError::MissingDataFinal {
             path: "D:/Games/League".into(),
         }
         .into(),
-    )
-    .into();
+    ));
+    let detail = json["detail"].as_str().unwrap();
 
-    assert!(resp.message.contains("D:/Games/League"), "{}", resp.message);
-    assert!(resp.message.contains("DATA/FINAL"), "{}", resp.message);
+    assert!(detail.contains("D:/Games/League"), "{detail}");
+    assert!(detail.contains("DATA/FINAL"), "{detail}");
+}
+
+#[test]
+fn a_response_round_trips_through_json() {
+    let response = AppErrorResponse::from(AppError::SchemaVersionTooNew {
+        file_version: 4,
+        max_supported: 3,
+    });
+    let json = serde_json::to_string(&response).unwrap();
+    let back: AppErrorResponse = serde_json::from_str(&json).unwrap();
+    assert!(matches!(
+        back,
+        AppErrorResponse::SchemaVersionTooNew {
+            file_version: 4,
+            max_supported: 3
+        }
+    ));
+}
+
+#[test]
+fn ipc_result_ok_serialization() {
+    let result: IpcResult<String> = IpcResult::ok("hello".to_string());
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["value"], "hello");
+}
+
+#[test]
+fn ipc_result_err_serialization() {
+    let result: IpcResult<String> = IpcResult::err(AppErrorResponse::Io {
+        detail: "disk full".into(),
+    });
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["ok"], false);
+    assert_eq!(json["error"]["code"], "IO");
+    assert_eq!(json["error"]["detail"], "disk full");
+}
+
+/// The wire, in one line: a code and the fields, and nothing else.
+#[test]
+fn the_envelope_carries_the_code_and_the_fields_only() {
+    let result: IpcResult<()> = Err::<(), AppError>(AppError::SchemaVersionTooNew {
+        file_version: 4,
+        max_supported: 3,
+    })
+    .into();
+    assert_eq!(
+        serde_json::to_value(&result).unwrap(),
+        serde_json::json!({
+            "ok": false,
+            "error": { "code": "SCHEMA_VERSION_TOO_NEW", "fileVersion": 4, "maxSupported": 3 }
+        })
+    );
+}
+
+#[test]
+fn ipc_result_from_ok() {
+    let result: IpcResult<i32> = Ok::<i32, AppErrorResponse>(42).into();
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["ok"], true);
+    assert_eq!(json["value"], 42);
+}
+
+#[test]
+fn ipc_result_from_err() {
+    let result: IpcResult<i32> = Err::<i32, AppError>(AppError::Other("oops".into())).into();
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["ok"], false);
+    assert_eq!(json["error"]["code"], "UNKNOWN");
 }

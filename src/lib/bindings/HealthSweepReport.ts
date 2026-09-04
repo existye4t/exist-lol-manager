@@ -14,7 +14,7 @@ basis: HealthCheckBasis,
  */
 checked: number, 
 /**
- * Mods whose stored verdict already named [`HealthSweepReport::basis`].
+ * Checkable mods this run did not take.
  */
 skipped: number, 
 /**

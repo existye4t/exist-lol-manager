@@ -13,8 +13,8 @@ function wrapper({ children }: { children: ReactNode }) {
   return <ToastProvider>{children}</ToastProvider>;
 }
 
-function launchError(context: LauncherError | undefined, message = "launch failed"): AppError {
-  return { code: "LAUNCHER", message, context };
+function launchError(error: LauncherError): AppError {
+  return { code: "LAUNCHER", error };
 }
 
 async function show(error: AppError) {
@@ -24,14 +24,14 @@ async function show(error: AppError) {
 
 describe("useLaunchErrorToast", () => {
   /// The code says only that a launch failed, so every remedy is chosen from
-  /// the context's `kind`.
+  /// the error's `kind`.
   it.each([
     [{ kind: "RIOT_CLIENT_NOT_FOUND", installsPath: "C:/x.json" }, "Can't find your Riot Client"],
     [{ kind: "RIOT_CLIENT_UNREACHABLE", reason: "HTTP 404" }, "Couldn't reach the Riot Client"],
     [{ kind: "SPAWN_FAILED", reason: "access denied" }, "Couldn't start the Riot Client"],
     [{ kind: "UNSUPPORTED_PLATFORM" }, "Launching isn't supported here"],
-  ] as [LauncherError, string][])("reads the remedy off %o", async (context, title) => {
-    await show(launchError(context));
+  ] as [LauncherError, string][])("reads the remedy off %o", async (error, title) => {
+    await show(launchError(error));
 
     expect(screen.getByText(title)).toBeInTheDocument();
   });
@@ -52,10 +52,11 @@ describe("useLaunchErrorToast", () => {
 
   it("passes a refusal it does not know through unedited", async () => {
     await show(
-      launchError(
-        { kind: "REFUSED", riotErrorCode: "something_new", message: "x" },
-        "The client said no.",
-      ),
+      launchError({
+        kind: "REFUSED",
+        riotErrorCode: "something_new",
+        message: "The client said no.",
+      }),
     );
 
     expect(screen.getByText("The Riot Client refused to launch League")).toBeInTheDocument();
@@ -70,11 +71,12 @@ describe("useLaunchErrorToast", () => {
     expect(screen.queryByText("Couldn't launch League")).not.toBeInTheDocument();
   });
 
-  /// An error with no context at all still has to say something.
-  it("falls back when there is no context", async () => {
-    await show(launchError(undefined, "something went wrong"));
+  /// A launch can fail before the launcher is reached, and that failure still
+  /// has to read as a launch failure.
+  it("frames a failure that is not the launcher's", async () => {
+    await show({ code: "IO", detail: "disk full" });
 
     expect(screen.getByText("Couldn't launch League")).toBeInTheDocument();
-    expect(screen.getByText("something went wrong")).toBeInTheDocument();
+    expect(screen.getByText("disk full")).toBeInTheDocument();
   });
 });

@@ -5,15 +5,15 @@ governs `crates/ltk-manager-core/`, which imports it.
 
 ## Workspace Crates
 
-| Crate                     | Knows about                       | Depends on   | License             |
-| ------------------------- | --------------------------------- | ------------ | ------------------- |
-| `crates/ltk-manager-core` | Manager domain logic, UI-agnostic | `ritoclient` | `MIT OR Apache-2.0` |
-| `src-tauri`               | Tauri commands, IPC, events       | core         | `MIT OR Apache-2.0` |
+| Crate                     | Knows about                       | Depends on   | License            |
+| ------------------------- | --------------------------------- | ------------ | ------------------ |
+| `crates/ltk-manager-core` | Manager domain logic, UI-agnostic | `ritoclient` | `GPL-3.0-or-later` |
+| `src-tauri`               | Tauri commands, IPC, events       | core         | `GPL-3.0-or-later` |
 
 `ritoclient` is an external dependency rather than a workspace member, pinned to a git rev in the
-root `Cargo.toml` until it ships on crates.io. It is **Apache-2.0**, where this workspace is dual
-licensed - not an oversight to tidy. Re-run `pnpm generate:licenses` after any dependency is added
-or relicensed.
+root `Cargo.toml` until it ships on crates.io. It is **Apache-2.0**, where this workspace is
+GPL-3.0-or-later - not an oversight to tidy. Re-run `pnpm generate:licenses` after any dependency
+is added or relicensed.
 
 Dependencies point one way only. `ritoclient` takes plain arguments (`Option<&Path>`) and reports
 through its own `LaunchObserver` and `SessionObserver` traits - it must never learn about `Config`,

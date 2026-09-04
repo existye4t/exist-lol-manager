@@ -8,19 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 """
+# The grouped commit list alone. release.yml composes the download link and the
+# version heading around whichever body it uses, so that they are written once
+# rather than once here and once for a hand-written docs/releases/<version>.md.
 body = """
-{%- macro remote_url() -%}
-  https://github.com/LeagueToolkit/ltk-manager
-{%- endmacro -%}
-
-{% if version -%}
-👉 **Download** [`LTK.Manager_{{ version | trim_start_matches(pat="v") }}_x64_en-US.msi`]({{ self::remote_url() }}/releases/download/{{ version }}/LTK.Manager_{{ version | trim_start_matches(pat="v") }}_x64_en-US.msi)
-
-## [{{ version | trim_start_matches(pat="v") }}]({{ self::remote_url() }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
-{% else -%}
-## [Unreleased]
-{% endif -%}
-
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | striptags | trim | upper_first }}
 {% for commit in commits %}

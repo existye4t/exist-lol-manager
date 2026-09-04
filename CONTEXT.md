@@ -96,6 +96,20 @@ The three words say what a **repair** can do, and nothing about how badly the mo
 missing, because neither carries a fix. Severity is the other axis, it rides in the counts, and a
 surface that draws a verdict reads both.
 
+**Rung** — the two axes folded into the one thing a surface draws: `repairable`, `broken` or
+`flagged`. The hue is the severity's and the words stay the verdict's, so `broken` is a mod the
+game refuses and `flagged` is one that loads with a fault no repair reaches. It is not a fourth
+verdict word and nothing stores it — every surface derives it from the verdict and the counts
+already on the row. Over several mods a repair on offer leads, and below that the loudest wins. See
+"How loud a finding is drawn" in `docs/ux/MOD_HEALTH.md`.
+
+**Announcement** — the one unprompted thing mod health says about the library it just read: the
+drawer for a **rung** the game pays for, an info toast for one it does not. Spent against the
+findings rather than against the launch, so a library that has not moved since the reader met it
+says nothing at all and leaves the news to the status bar cell. What is compared is each unhealthy
+mod and its counts, which is why re-ordering the library is not a change. There is no dismiss —
+meeting it is what spends it.
+
 **Unchecked** — a mod carrying no verdict, which draws no badge and says nothing. Never checked,
 checked by a build whose stored shape has since been discarded, or declined because the hashtable
 cache was empty. A verdict is a claim, and an unchecked mod is a claim about nothing — the state
@@ -121,15 +135,21 @@ sync that runs in front of the health sweep.
 **Meta schema** — what type the game expects every bin property to hold, per build, published as
 one database by the LTK Meta Wiki. The game compares a bin's type tag against its own registrar by
 exact equality and silently discards a value that does not match, so this is the whole of what a
-type check needs. A build ships a snapshot so a check works offline, a cached copy sits beside the
-hashtables, and its **generation** is the publisher's stamp. Not the **schema migration**, which is
-`library.json`'s own versioning and unrelated.
+type check needs. The cached copy beside the hashtables is the one a check reads, and the **health
+sweep** refreshes it before it runs, so a newer schema reaches a user without waiting on a release.
+A build ships a snapshot as the floor under that, for the machine that has never synced or is
+offline, and its **generation** is the publisher's stamp. Which way round those two go is the point:
+the sync is how the schema is delivered and the snapshot is only what stands in until it lands, so a
+publisher that cannot be reached costs a check its freshness and never its result. Not the **schema
+migration**, which is `library.json`'s own versioning and unrelated.
 
-**Health sweep** — the startup pass that re-checks every mod whose basis moved, and forgets the
-verdicts of mods the library no longer holds. It forgets either way and checks only with the
-hashtable cache in hand, standing down without it rather than recording verdicts it could not
-earn. Not the **staging sweep**, which is the same word for clearing `mods/.staging-*` and is
-unrelated. What it found draws as a banner above the library.
+**Health sweep** — a pass that re-checks a set of mods and forgets the verdicts of mods the
+library no longer holds. Its **scope** is what a caller chooses: the startup pass and the one a
+hashtable sync starts take every mod whose basis moved, and a press in the library takes every mod
+or the reader's selection, whatever their basis says. It forgets either way and checks only with
+the hashtable cache in hand — the automatic scope stands down without it, and a pressed one refuses
+in words, because that one has somebody waiting. Not the **staging sweep**, which is the same word
+for clearing `mods/.staging-*` and is unrelated.
 
 **Repair** — applying every fix the live rules derive for one mod. In the tree for a `project`
 mod. For an `archive` mod: unpack, fix, and edit the fixed files back into the archive where it
@@ -212,3 +232,20 @@ names no rule either, and for the same reason: each of the three defects that wo
 it was measured at zero, and each is a state the build should assert over the archives it just
 wrote rather than one a pass over a library should hunt for. So the naming rule now has no
 instance, which does not make it wrong — see ADR-0010.
+
+## User-facing copy
+
+**Message** — one string a user reads, as a key in `messages/en/<module>.json` and the typed
+function Paraglide compiles from it. A key is a slot, `library_empty_title`, or the domain id the
+backend sends, `rule.bin/property-type.title`. The frontend owns every message and the backend sends
+codes, ids and typed fields — see ADR-0017.
+
+**Catalog** — `messages/` as a whole, every message the app can say, one file per module and
+`common.json` for the words every module shares. Its compiled form under `src/paraglide/` is
+generated and not committed — see ADR-0018.
+
+**Error copy** — what the frontend shows for one backend error: a **title** naming what went
+wrong, a **description** giving the remedy where one exists, and a **detail** carrying prose from
+outside the app, such as an OS or crate error, drawn as data. A **describer** in `src/i18n/`
+turns an error's code and fields into that copy, and nothing else reads an error's fields for
+display.

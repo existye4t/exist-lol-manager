@@ -2,9 +2,11 @@
 //!
 //! Per "The library sweep" in docs/ux/MOD_HEALTH.md.
 
-use super::{HealthCheckBasis, LEGACY_VERDICTS_FILENAME, ModHealth, ModHealthVerdict, VerdictFile};
+use super::{
+    HealthCheckBasis, LEGACY_VERDICTS_FILENAME, ModHealth, ModHealthVerdict, Refused, VerdictFile,
+};
 use crate::config::Config;
-use crate::error::{AppResult, MutexResultExt};
+use crate::error::{AppError, AppResult, MutexResultExt};
 use crate::events::{BackendEvent, HealthSweepProgress};
 use crate::hashtables::HashtableCache;
 use crate::meta_schema::cache::{MetaSchemaCache, PublishedDb};
@@ -26,7 +28,7 @@ pub struct HealthSweepReport {
     pub basis: HealthCheckBasis,
     /// Mods this run recorded a fresh verdict for.
     pub checked: usize,
-    /// Mods whose stored verdict already named [`HealthSweepReport::basis`].
+    /// Checkable mods this run did not take.
     pub skipped: usize,
     /// Every mod in the library a repair would fix, by id.
     pub repairable: Vec<String>,
@@ -59,6 +61,61 @@ pub enum HealthSweepState {
     Finished { report: HealthSweepReport },
 }
 
+/// Which mods a sweep takes.
+///
+/// [`Due`](SweepScope::Due) is the automatic pass and the other two answer a
+/// press, which is the whole difference between them: a reader who asked for a
+/// check is owed one whatever the stored verdicts claim, and is owed a refusal
+/// in words where it cannot run.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum SweepScope {
+    /// Every checkable mod whose verdict predates the current basis.
+    #[default]
+    Due,
+    /// Every checkable mod in the library.
+    All,
+    /// The checkable mods among these ids.
+    Only(Vec<String>),
+}
+
+impl SweepScope {
+    /// Whether a reader is waiting on this run.
+    #[must_use]
+    fn pressed(&self) -> bool {
+        !matches!(self, Self::Due)
+    }
+
+    /// The mods this scope takes, out of the library's `entries`.
+    fn take(
+        &self,
+        entries: &[LibraryModEntry],
+        kept: &BTreeMap<String, ModHealthVerdict>,
+        basis: &HealthCheckBasis,
+    ) -> Vec<String> {
+        entries
+            .iter()
+            .filter(|entry| entry.is_checkable())
+            .filter(|entry| match self {
+                Self::Due => kept.get(&entry.id).is_none_or(|held| &held.basis != basis),
+                Self::All => true,
+                Self::Only(ids) => ids.contains(&entry.id),
+            })
+            .map(|entry| entry.id.clone())
+            .collect()
+    }
+
+    /// What the run may hold at once, and how many mods it opens together.
+    ///
+    /// A pressed run takes the larger share, because the reader is waiting on
+    /// it rather than browsing past it.
+    fn budget(&self) -> (Budget, usize) {
+        match self {
+            Self::Due => (Budget::sweep(), budget::SWEEP_MODS_AT_ONCE),
+            _ => (Budget::repair(), budget::MODS_AT_ONCE),
+        }
+    }
+}
+
 impl ModLibrary {
     /// Re-check every mod whose verdict predates the current [`HealthCheckBasis`].
     ///
@@ -70,8 +127,21 @@ impl ModLibrary {
     ///
     /// Fails only before the run starts, for a storage directory that cannot be
     /// resolved or an index that cannot be read. Once it is under way it always
-    /// reports.
-    pub fn sweep_mod_health(&self, config: &Config) -> AppResult<HealthSweepReport> {
+    /// reports. A pressed `scope` also fails where the automatic one stands
+    /// down, since a press has somebody to answer.
+    pub fn sweep_mod_health(
+        &self,
+        config: &Config,
+        scope: &SweepScope,
+    ) -> AppResult<HealthSweepReport> {
+        if scope.pressed()
+            && let HealthSweepState::Running { .. } = self.health_sweep_state()
+        {
+            return Err(AppError::ValidationFailed(
+                "The library is already being checked. Wait for that run to finish.".to_owned(),
+            ));
+        }
+
         let basis = self.health_check_basis(config);
         let entries = self.with_index(config, |_storage_dir, index| Ok(index.mods.clone()))?;
         let storage_dir = self.storage_dir(config)?;
@@ -83,6 +153,9 @@ impl ModLibrary {
         // every verdict this pass could record would misjudge what a repair
         // reaches - see `ModLibrary::hashtables_ready`.
         if !self.hashtables_ready() {
+            if scope.pressed() {
+                return Err(self.no_hashtables(Refused::Check));
+            }
             tracing::warn!(
                 "Not sweeping mod health: the hashtable cache is empty, so every verdict would be \
                  a claim about content the rules could not name"
@@ -93,7 +166,7 @@ impl ModLibrary {
         }
 
         let checkable = entries.iter().filter(|entry| entry.is_checkable()).count();
-        let due = due_for_check(&entries, &kept, &basis);
+        let due = scope.take(&entries, &kept, &basis);
         let (total, skipped) = (due.len(), checkable - due.len());
 
         if total == 0 {
@@ -105,14 +178,12 @@ impl ModLibrary {
         tracing::info!("Sweeping mod health: {total} to check, {skipped} already current");
         let started = std::time::Instant::now();
 
-        // The sweep is speculative background work competing with someone
-        // browsing their library, so it takes a smaller share than a repair a
-        // user pressed for.
-        let budget = self.begin_health_run(Budget::sweep());
+        let (share, at_once) = scope.budget();
+        let budget = self.begin_health_run(share);
         let progress = SweepProgress::new(total);
         let outcomes = budget.map(
             &due,
-            budget::SWEEP_MODS_AT_ONCE,
+            at_once,
             |_| 0,
             |mod_id| {
                 progress.begin(mod_id, self);
@@ -376,24 +447,6 @@ fn drop_legacy_verdicts(storage_dir: &Path) {
     if let Err(e) = fs::remove_file(&legacy) {
         tracing::debug!("Could not remove {LEGACY_VERDICTS_FILENAME}: {e}");
     }
-}
-
-/// The checkable mods of `entries` whose verdict in `kept` is not a claim about
-/// `basis`.
-///
-/// A mod never checked is due by the same test, since it has no verdict to
-/// disagree with.
-fn due_for_check(
-    entries: &[LibraryModEntry],
-    kept: &BTreeMap<String, ModHealthVerdict>,
-    basis: &HealthCheckBasis,
-) -> Vec<String> {
-    entries
-        .iter()
-        .filter(|entry| entry.is_checkable())
-        .filter(|entry| kept.get(&entry.id).is_none_or(|held| &held.basis != basis))
-        .map(|entry| entry.id.clone())
-        .collect()
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { z } from "zod";
 
 import { Button, Dialog, Field, IconButton, Select, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { useAppForm } from "@/lib/form";
 import { useSettings } from "@/modules/settings";
 import { useWorkshopDialogsStore } from "@/stores";
@@ -78,7 +79,7 @@ export function NewProjectDialog() {
                 { projectPath: project.path, imagePath: selectedThumbnailPath },
                 {
                   onError: (err) =>
-                    toast.error("Project created, but thumbnail failed", err.message),
+                    toast.error("Project created, but thumbnail failed", errorSummary(err)),
                 },
               );
             }
@@ -86,7 +87,7 @@ export function NewProjectDialog() {
             handleClose();
           },
           onError: (err) => {
-            toast.error("Failed to create project", err.message);
+            toast.error("Failed to create project", errorSummary(err));
           },
         },
       );

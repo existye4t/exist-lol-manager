@@ -29,6 +29,8 @@
 mod app;
 mod deep_link;
 mod diagnostics;
+mod exist_skins;
+mod exist_sync;
 mod folders;
 mod game_extract;
 mod game_index;
@@ -44,7 +46,9 @@ mod platform;
 mod preview;
 mod problems;
 mod profiles;
+mod releases;
 mod ritobin;
+mod runeforge;
 mod settings;
 mod shell;
 mod storage;
@@ -54,6 +58,8 @@ mod workshop;
 pub use app::*;
 pub use deep_link::*;
 pub use diagnostics::*;
+pub use exist_skins::*;
+pub use exist_sync::*;
 pub use folders::*;
 pub use game_extract::*;
 pub use game_index::*;
@@ -69,7 +75,9 @@ pub use platform::*;
 pub use preview::*;
 pub use problems::*;
 pub use profiles::*;
+pub use releases::*;
 pub use ritobin::*;
+pub use runeforge::*;
 pub use settings::*;
 pub use shell::*;
 pub use storage::*;
@@ -84,7 +92,7 @@ use crate::error::{AppError, AppResult, IpcResult};
 /// window, so anything that walks a directory, opens an archive or waits on
 /// another thread answers through here instead.
 ///
-/// A panic inside `work` comes back as `ErrorCode::Unknown` rather than
+/// A panic inside `work` comes back as `AppErrorResponse::Unknown` rather than
 /// unwinding into the runtime.
 // TODO: fold each caller's setup into `work` - nine of them read config or
 // state up front and early-return through `IpcResult::from(Err::<T, _>(e))`,

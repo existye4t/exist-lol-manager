@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ModRepairProgress } from "@/lib/tauri";
 import type { BrokenMods } from "@/modules/library";
+import { useModHealthDrawerStore } from "@/stores";
 
 import { ModHealthSweepPanel } from "../ModHealthSweepPanel";
 import { brokenMods, installedMod, verdict } from "./modHealthFixtures";
@@ -17,6 +18,7 @@ const cancelRun = vi.fn();
 const onClose = vi.fn();
 
 vi.mock("../../api", () => ({
+  useModHealthVerdicts: () => ({ data: verdicts }),
   useBrokenMods: () => useBrokenMods(),
   useInstalledMods: () => useInstalledMods(),
   useRepairMod: () => ({ mutate: repairOne, isPending: false }),
@@ -36,6 +38,8 @@ vi.mock("../../api", () => ({
 }));
 
 let run: { repair: () => void; isRepairing: boolean; progress: ModRepairProgress | null };
+/** What the library remembers, which is more than the unhealthy mods. */
+let verdicts: Record<string, ReturnType<typeof verdict>>;
 
 function show(broken: Partial<Omit<BrokenMods, "all">>) {
   useBrokenMods.mockReturnValue(brokenMods(broken));
@@ -45,12 +49,56 @@ function show(broken: Partial<Omit<BrokenMods, "all">>) {
 beforeEach(() => {
   vi.clearAllMocks();
   run = { repair: vi.fn(), isRepairing: false, progress: null };
+  verdicts = {};
+  useModHealthDrawerStore.setState({ focusModId: null });
   useInstalledMods.mockReturnValue({
     data: [installedMod("a", "Charizard Smolder"), installedMod("b", "Old Ashe Rework")],
   });
 });
 
 describe("ModHealthSweepPanel", () => {
+  /* Story: Check Health on a mod whose findings are all informative used to
+     answer with a count in a toast, which named them without showing them. */
+  it("lists the mod a press asked about, though nothing about it is wrong", () => {
+    verdicts = { a: verdict("a", "healthy", { findings: 3, severity: "info" }) };
+    useModHealthDrawerStore.setState({ focusModId: "a" });
+    show({});
+
+    expect(screen.getByText("Charizard Smolder")).toBeInTheDocument();
+  });
+
+  /* The panel cannot call them issues in its title while it draws them. */
+  it("does not call a list with nothing wrong in it a list of issues", () => {
+    verdicts = { a: verdict("a", "healthy", { findings: 3, severity: "info" }) };
+    useModHealthDrawerStore.setState({ focusModId: "a" });
+    show({});
+
+    expect(screen.getByRole("heading", { name: "No problems found" })).toBeInTheDocument();
+    expect(
+      screen.getByText("These findings are worth knowing, and none of them is a fault"),
+    ).toBeInTheDocument();
+  });
+
+  /* A row missing no press has nothing to say in the press's seat, and
+     "Not auto-fixable" over a mod that is fine is the wrong errand. */
+  it("sends a healthy row nowhere", () => {
+    verdicts = { a: verdict("a", "healthy", { findings: 3, severity: "info" }) };
+    useModHealthDrawerStore.setState({ focusModId: "a" });
+    show({});
+
+    expect(screen.queryByText("Not auto-fixable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Needs an updated version")).not.toBeInTheDocument();
+  });
+
+  /* A mod already in the list is not listed twice for having been asked about. */
+  it("does not repeat a mod the list already holds", () => {
+    verdicts = { a: verdict("a", "repairable") };
+    useModHealthDrawerStore.setState({ focusModId: "a" });
+    show({ repairable: [verdict("a", "repairable")] });
+
+    expect(screen.getAllByText("Charizard Smolder")).toHaveLength(1);
+  });
+
   /* The title says what was found. Which of the two errands the reader is on is
      the line underneath, and it is one of three. */
   it("promises the repair when every finding can be reached", () => {
@@ -67,6 +115,19 @@ describe("ModHealthSweepPanel", () => {
     expect(screen.getByText(/None of them are auto-fixable/)).toBeInTheDocument();
   });
 
+  /* Story: an unrepairable mod whose worst finding is a warning is a mod that
+     loads and plays. Sending that reader after an updated version is the errand
+     the flat "no repair reaches it" header used to hand every one of them. */
+  it("sends nobody looking when nothing stops a mod loading", () => {
+    show({
+      repairable: [],
+      unrepairable: [verdict("b", "unrepairable", { severity: "warning" })],
+    });
+
+    expect(screen.getByText(/none of them stops a mod loading/)).toBeInTheDocument();
+    expect(screen.queryByText(/look for updated versions/)).not.toBeInTheDocument();
+  });
+
   it("names both errands when the list is mixed", () => {
     show({
       repairable: [verdict("a", "repairable")],
@@ -75,6 +136,18 @@ describe("ModHealthSweepPanel", () => {
 
     expect(screen.getByText("Repairing is recommended")).toBeInTheDocument();
     expect(screen.getByText(/some will need updated versions instead/)).toBeInTheDocument();
+  });
+
+  /* The press cannot reach the rest, and the rest do not need reaching. */
+  it("promises no updated versions for a mixed list the game still loads", () => {
+    show({
+      repairable: [verdict("a", "repairable")],
+      unrepairable: [verdict("b", "unrepairable", { severity: "warning" })],
+    });
+
+    expect(screen.getByText("Repairing is recommended")).toBeInTheDocument();
+    expect(screen.getByText(/what it misses will still load/)).toBeInTheDocument();
+    expect(screen.queryByText(/updated versions/)).not.toBeInTheDocument();
   });
 
   /* A row counts every finding rather than the subset a repair can reach, and
@@ -113,6 +186,15 @@ describe("ModHealthSweepPanel", () => {
 
     expect(screen.getByText("Old Ashe Rework")).toBeInTheDocument();
     expect(screen.getByText("Needs an updated version")).toBeInTheDocument();
+  });
+
+  /* The seat says what the press would not have done. Only the mod the game
+     refuses is sent after a replacement. */
+  it("says only that a warning row is not auto-fixable", () => {
+    show({ unrepairable: [verdict("b", "unrepairable", { findings: 4, severity: "warning" })] });
+
+    expect(screen.getByText("Not auto-fixable")).toBeInTheDocument();
+    expect(screen.queryByText("Needs an updated version")).not.toBeInTheDocument();
   });
 
   /* `3 problems` says how much and nothing else. The name is the disclosure,

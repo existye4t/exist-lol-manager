@@ -77,7 +77,7 @@ export function LeagueSection({ settings, onSave }: LeagueSectionProps) {
       onSuccess: (path) => {
         if (path) selectPath(path);
       },
-      onError: (error) => console.error("Failed to auto-detect:", error.message),
+      onError: (error) => console.error("Failed to auto-detect:", error),
     });
   }
 

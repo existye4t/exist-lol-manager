@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-
-import { Library } from "../pages/Library";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
-  component: Library,
+  beforeLoad: () => {
+    throw redirect({ to: "/skins" });
+  },
 });

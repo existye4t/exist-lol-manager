@@ -11,6 +11,13 @@ const AFTER_RETYPE: GameBuild = GameBuild::new(16, 17, 8_104_348);
 const FLOAT_TEXT_ICON_DATA: BinHash = BinHash(0x16d8_8f43);
 const M_ICON_FILE_NAME: BinHash = BinHash(0x1053_7b0c);
 const M_OFFSET: BinHash = BinHash(0x26db_cd4b);
+/// An `Option` on both sides of the retype, so the kind alone cannot tell them apart.
+const ICON_CIRCLE: BinHash = BinHash(0xe672_84f4);
+const UNCENSORED_ICON_CIRCLES: BinHash = BinHash(0x8ce0_4c3d);
+/// A `List` the schema fixes at seven items.
+const M_VALUES: BinHash = BinHash(0x0a1b_2c3d);
+/// An `Option` holding a type this build cannot map.
+const M_HOLDS_SOMETHING_NEW: BinHash = BinHash(0x0bad_f00d);
 
 /// The published shape, cut to the one class the case turns on.
 fn published() -> String {
@@ -41,6 +48,31 @@ fn published() -> String {
                   "revisions": [
                     { "from": 5229820, "type": ["SomethingNew", "0x0", "0x0", "0x0"] }
                   ]
+                },
+                "0xe67284f4": {
+                  "name": "iconCircle",
+                  "revisions": [
+                    { "from": 5229820, "to": 8049184, "type": ["Option", "0x0", "String", "0x0"] },
+                    { "from": 8104348, "type": ["Option", "0x0", "File", "0x0"] }
+                  ]
+                },
+                "0x8ce04c3d": {
+                  "name": "uncensoredIconCircles",
+                  "revisions": [
+                    { "from": 5229820, "type": ["Map", "Hash", "File", "0x0"] }
+                  ]
+                },
+                "0x0a1b2c3d": {
+                  "name": "mValues",
+                  "revisions": [
+                    { "from": 5229820, "type": ["List", "0x7", "F32", "0x0"] }
+                  ]
+                },
+                "0x0badf00d": {
+                  "name": "mHoldsSomethingNew",
+                  "revisions": [
+                    { "from": 5229820, "type": ["Option", "0x0", "SomethingNew", "0x0"] }
+                  ]
                 }
               }
             }
@@ -67,10 +99,87 @@ fn a_retyped_property_answers_per_build() {
         .expected(FLOAT_TEXT_ICON_DATA, M_ICON_FILE_NAME, AFTER_RETYPE)
         .expect("the database covers 16.17");
 
-    assert_eq!(before.kind, Some(Kind::String));
-    assert_eq!(after.kind, Some(Kind::WadChunkLink));
+    assert_eq!(before.shape, Some(Shape::bare(Kind::String)));
+    assert_eq!(after.shape, Some(Shape::bare(Kind::WadChunkLink)));
     assert_eq!(after.class_name, Some("FloatTextIconData"));
     assert_eq!(after.field_name, Some("mIconFileName"));
+}
+
+/// Story: `iconCircle` is an `Option` before and after Riot retyped what it
+/// holds, so the kind alone calls both sides equal. What a complex type holds
+/// is part of the answer, or the retype is invisible.
+#[test]
+fn a_complex_type_answers_with_its_subtypes() {
+    let schema = schema();
+
+    let before = schema
+        .expected(FLOAT_TEXT_ICON_DATA, ICON_CIRCLE, BEFORE_RETYPE)
+        .unwrap();
+    let after = schema
+        .expected(FLOAT_TEXT_ICON_DATA, ICON_CIRCLE, AFTER_RETYPE)
+        .unwrap();
+    let map = schema
+        .expected(FLOAT_TEXT_ICON_DATA, UNCENSORED_ICON_CIRCLES, AFTER_RETYPE)
+        .unwrap();
+
+    assert_eq!(
+        before.shape,
+        Some(Shape {
+            kind: Kind::Optional,
+            key: None,
+            value: Some(Kind::String),
+        })
+    );
+    assert_eq!(
+        after.shape,
+        Some(Shape {
+            kind: Kind::Optional,
+            key: None,
+            value: Some(Kind::WadChunkLink),
+        })
+    );
+    assert_eq!(
+        map.shape,
+        Some(Shape {
+            kind: Kind::Map,
+            key: Some(Kind::Hash),
+            value: Some(Kind::WadChunkLink),
+        })
+    );
+}
+
+/// A list writes its fixed size where a map writes its key kind, and a count
+/// is not a type name to refuse the whole revision over.
+#[test]
+fn a_fixed_size_list_answers_its_item_kind_and_no_key() {
+    let schema = schema();
+
+    let found = schema
+        .expected(FLOAT_TEXT_ICON_DATA, M_VALUES, AFTER_RETYPE)
+        .unwrap();
+
+    assert_eq!(
+        found.shape,
+        Some(Shape {
+            kind: Kind::Container,
+            key: None,
+            value: Some(Kind::F32),
+        })
+    );
+}
+
+/// A subtype this build cannot map is as unreadable as a kind it cannot, so
+/// the revision declines to answer rather than answering for the wrapper alone.
+#[test]
+fn an_unmappable_subtype_answers_without_a_type() {
+    let schema = schema();
+
+    let found = schema
+        .expected(FLOAT_TEXT_ICON_DATA, M_HOLDS_SOMETHING_NEW, AFTER_RETYPE)
+        .expect("the revision is found");
+
+    assert_eq!(found.shape, None);
+    assert_eq!(found.field_name, Some("mHoldsSomethingNew"));
 }
 
 /// A revision's `to` is the last build it held for, not the first build after
@@ -84,8 +193,8 @@ fn the_end_of_a_revision_is_inclusive() {
         .unwrap();
 
     assert_eq!(
-        at_boundary.kind,
-        Some(Kind::String),
+        at_boundary.shape,
+        Some(Shape::bare(Kind::String)),
         "8049184 is the last build of the String revision, not the first of the File one"
     );
 }
@@ -99,7 +208,7 @@ fn a_property_with_one_revision_answers_everywhere() {
         let found = schema
             .expected(FLOAT_TEXT_ICON_DATA, M_OFFSET, build)
             .unwrap();
-        assert_eq!(found.kind, Some(Kind::Vector2));
+        assert_eq!(found.shape, Some(Shape::bare(Kind::Vector2)));
     }
 }
 
@@ -142,7 +251,7 @@ fn an_unmappable_type_name_answers_without_a_kind() {
         .expected(FLOAT_TEXT_ICON_DATA, BinHash(0xdead_beef), AFTER_RETYPE)
         .expect("the revision is found");
 
-    assert_eq!(found.kind, None);
+    assert_eq!(found.shape, None);
     assert_eq!(found.field_name, Some("mUnnameable"));
 }
 
@@ -217,7 +326,7 @@ fn the_shipped_snapshot_answers_the_case_the_rule_exists_for() {
     let after = schema
         .expected(FLOAT_TEXT_ICON_DATA, M_ICON_FILE_NAME, AFTER_RETYPE)
         .expect("FloatTextIconData.mIconFileName is in the published database");
-    assert_eq!(after.kind, Some(Kind::WadChunkLink));
+    assert_eq!(after.shape, Some(Shape::bare(Kind::WadChunkLink)));
     assert_eq!(after.class_name, Some("FloatTextIconData"));
     assert_eq!(after.field_name, Some("mIconFileName"));
 
@@ -225,8 +334,8 @@ fn the_shipped_snapshot_answers_the_case_the_rule_exists_for() {
         .expected(FLOAT_TEXT_ICON_DATA, M_ICON_FILE_NAME, BEFORE_RETYPE)
         .expect("the same property before Riot retyped it");
     assert_eq!(
-        before.kind,
-        Some(Kind::String),
+        before.shape,
+        Some(Shape::bare(Kind::String)),
         "the mod's String is right for 16.16 and wrong for 16.17, which is the whole point"
     );
 }
@@ -242,7 +351,7 @@ fn the_shipped_snapshot_writes_no_type_name_this_build_cannot_map() {
         .values()
         .flat_map(|class| class.properties.values())
         .flat_map(|property| property.revisions.iter())
-        .filter(|revision| revision.kind.is_none())
+        .filter(|revision| revision.shape.is_none())
         .count();
 
     assert_eq!(

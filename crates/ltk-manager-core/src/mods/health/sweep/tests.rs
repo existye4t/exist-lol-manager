@@ -41,7 +41,7 @@ fn a_first_sweep_checks_every_mod_and_names_the_broken_ones() {
         ],
     );
 
-    let report = library.sweep_mod_health(&config).unwrap();
+    let report = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(report.checked, 2);
     assert_eq!(report.skipped, 0);
@@ -63,7 +63,7 @@ fn a_verdict_names_the_rules_behind_its_counts() {
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
 
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     let verdicts = library.mod_health_verdicts(&config).unwrap();
     let verdict = &verdicts["id-1"];
@@ -90,8 +90,8 @@ fn a_second_sweep_on_the_same_basis_re_checks_nothing() {
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
 
-    library.sweep_mod_health(&config).unwrap();
-    let again = library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
+    let again = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(again.checked, 0);
     assert_eq!(again.skipped, 1);
@@ -111,13 +111,13 @@ fn a_game_patch_makes_every_verdict_due_again() {
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
 
-    let before = library.sweep_mod_health(&config).unwrap();
+    let before = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
     // On the older build the retype rule is dormant, so its findings are not
     // live and the mod reads healthy.
     assert!(before.repairable.is_empty());
 
     point_at_build(&mut config, storage.path(), "16.17.8087655");
-    let after = library.sweep_mod_health(&config).unwrap();
+    let after = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(after.checked, 1);
     assert_eq!(after.repairable, vec!["id-1".to_string()]);
@@ -132,11 +132,11 @@ fn a_manager_release_makes_every_verdict_due_again() {
     point_at_installed_build(&mut config, storage.path());
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     let (updated, _) = make_library_with_version(storage.path(), "next-release");
 
-    let report = updated.sweep_mod_health(&config).unwrap();
+    let report = updated.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(report.checked, 1);
     assert_eq!(report.skipped, 0);
@@ -155,7 +155,7 @@ fn a_verdict_taken_by_an_older_rule_set_loses_its_badge_on_the_next_sweep() {
     point_at_installed_build(&mut config, storage.path());
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     // The library as the previous release left it: checked, and checked by
     // rules that had nothing to say about this mod.
@@ -169,7 +169,7 @@ fn a_verdict_taken_by_an_older_rule_set_loses_its_badge_on_the_next_sweep() {
     }
     file.save(storage.path()).unwrap();
 
-    let report = library.sweep_mod_health(&config).unwrap();
+    let report = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(report.checked, 1);
     assert_eq!(report.repairable, vec!["id-1".to_string()]);
@@ -189,8 +189,14 @@ fn a_verdict_taken_against_other_hashtables_is_due_again() {
     point_at_installed_build(&mut config, storage.path());
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
-    library.sweep_mod_health(&config).unwrap();
-    assert_eq!(library.sweep_mod_health(&config).unwrap().checked, 0);
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
+    assert_eq!(
+        library
+            .sweep_mod_health(&config, &SweepScope::Due)
+            .unwrap()
+            .checked,
+        0
+    );
 
     let mut file = VerdictFile::load(storage.path());
     for verdict in file.verdicts.values_mut() {
@@ -198,7 +204,104 @@ fn a_verdict_taken_against_other_hashtables_is_due_again() {
     }
     file.save(storage.path()).unwrap();
 
-    assert_eq!(library.sweep_mod_health(&config).unwrap().checked, 1);
+    assert_eq!(
+        library
+            .sweep_mod_health(&config, &SweepScope::Due)
+            .unwrap()
+            .checked,
+        1
+    );
+}
+
+/// Story: the user presses Check Health over their library and wants an answer
+/// about it, not a report on how little there was to do.
+#[test]
+fn a_pressed_sweep_takes_every_mod_again() {
+    let storage = tempfile::tempdir().unwrap();
+    let (library, mut config) = make_test_library(storage.path());
+    point_at_installed_build(&mut config, storage.path());
+    place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
+    place_bin_project_mod(storage.path(), "fine-mod", &healthy_bin());
+    seed_library(
+        &library,
+        &config,
+        vec![
+            project_entry("id-stale", "stale-mod"),
+            project_entry("id-fine", "fine-mod"),
+        ],
+    );
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
+
+    let report = library.sweep_mod_health(&config, &SweepScope::All).unwrap();
+
+    assert_eq!(report.checked, 2);
+    assert_eq!(report.skipped, 0);
+}
+
+/// Story: the user selects the one mod they just reinstalled and checks it,
+/// which must not spend the machine on the other two hundred.
+#[test]
+fn a_pressed_sweep_over_a_selection_leaves_the_rest_alone() {
+    let storage = tempfile::tempdir().unwrap();
+    let (library, mut config) = make_test_library(storage.path());
+    point_at_installed_build(&mut config, storage.path());
+    place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
+    place_bin_project_mod(storage.path(), "fine-mod", &healthy_bin());
+    seed_library(
+        &library,
+        &config,
+        vec![
+            project_entry("id-stale", "stale-mod"),
+            project_entry("id-fine", "fine-mod"),
+        ],
+    );
+
+    let report = library
+        .sweep_mod_health(&config, &SweepScope::Only(vec!["id-stale".to_owned()]))
+        .unwrap();
+
+    assert_eq!(report.checked, 1);
+    assert_eq!(report.skipped, 1);
+    let verdicts = library.mod_health_verdicts(&config).unwrap();
+    assert!(verdicts.contains_key("id-stale"));
+    assert!(
+        !verdicts.contains_key("id-fine"),
+        "a mod outside the selection is not checked"
+    );
+}
+
+/// An id the library no longer holds is not a mod to check, and naming one is
+/// not an error - the selection was taken before the index moved.
+#[test]
+fn a_pressed_sweep_ignores_an_id_the_library_does_not_hold() {
+    let storage = tempfile::tempdir().unwrap();
+    let (library, mut config) = make_test_library(storage.path());
+    point_at_installed_build(&mut config, storage.path());
+    place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
+    seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
+
+    let report = library
+        .sweep_mod_health(&config, &SweepScope::Only(vec!["id-gone".to_owned()]))
+        .unwrap();
+
+    assert_eq!(report.checked, 0);
+}
+
+/// Story: the press answers in words rather than standing down, because
+/// somebody is waiting on it - see "The hashtables come first" in
+/// docs/ux/MOD_HEALTH.md.
+#[test]
+fn a_pressed_sweep_refuses_without_the_hashtables() {
+    let storage = tempfile::tempdir().unwrap();
+    let (library, mut config) =
+        crate::mods::test_support::make_library_without_hashtables(storage.path());
+    point_at_installed_build(&mut config, storage.path());
+    place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
+    seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
+
+    let refused = library.sweep_mod_health(&config, &SweepScope::All);
+
+    assert_matches!(refused, Err(e) if e.to_string().contains("hashtables"));
 }
 
 /// Story: the fresh install with no network. Nothing is checked and nothing is
@@ -214,7 +317,7 @@ fn a_sweep_stands_down_before_the_hashtables_are_there() {
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
 
-    let report = library.sweep_mod_health(&config).unwrap();
+    let report = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(report.checked, 0);
     assert!(report.repairable.is_empty());
@@ -231,11 +334,13 @@ fn a_sweep_that_stands_down_still_prunes() {
     point_at_installed_build(&mut config, storage.path());
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     let (unsynced, _) = crate::mods::test_support::make_library_without_hashtables(storage.path());
     seed_library(&unsynced, &config, Vec::new());
-    unsynced.sweep_mod_health(&config).unwrap();
+    unsynced
+        .sweep_mod_health(&config, &SweepScope::Due)
+        .unwrap();
 
     assert!(library.mod_health_verdicts(&config).unwrap().is_empty());
 }
@@ -252,7 +357,7 @@ fn a_sweep_removes_the_verdict_cache_written_under_its_old_name() {
     let legacy = storage.path().join("check-verdicts.json");
     fs::write(&legacy, r#"{"version":0,"verdicts":{}}"#).unwrap();
 
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert!(!legacy.exists());
     assert!(
@@ -277,7 +382,7 @@ fn a_sweep_forgets_the_verdict_of_a_mod_the_library_no_longer_holds() {
             project_entry("id-goes", "gone-mod"),
         ],
     );
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
     assert!(
         library
             .mod_health_verdicts(&config)
@@ -290,7 +395,7 @@ fn a_sweep_forgets_the_verdict_of_a_mod_the_library_no_longer_holds() {
         &config,
         vec![project_entry("id-keeps", "stale-mod")],
     );
-    let report = library.sweep_mod_health(&config).unwrap();
+    let report = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     let verdicts = library.mod_health_verdicts(&config).unwrap();
     assert!(verdicts.contains_key("id-keeps"));
@@ -316,7 +421,7 @@ fn a_modpkg_is_not_swept() {
         )],
     );
 
-    let report = library.sweep_mod_health(&config).unwrap();
+    let report = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(report.checked, 0);
     assert_eq!(report.skipped, 0);
@@ -348,7 +453,7 @@ fn one_unreadable_mod_does_not_stop_the_sweep() {
         ],
     );
 
-    let report = library.sweep_mod_health(&config).unwrap();
+    let report = library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
 
     assert_eq!(
         report.checked, 1,
@@ -368,7 +473,7 @@ fn a_sweep_announces_its_progress_and_its_result_only_when_it_ran() {
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
 
-    library.sweep_mod_health(&config).unwrap();
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
     // One mod is picked up and then finished, so it is reported twice.
     assert_eq!(
         events.names(),
@@ -392,7 +497,7 @@ fn a_sweep_announces_its_progress_and_its_result_only_when_it_ran() {
 
     let quiet = Arc::new(RecordingEventSink::default());
     let (again, _) = make_library_with_events(storage.path(), quiet.clone());
-    again.sweep_mod_health(&config).unwrap();
+    again.sweep_mod_health(&config, &SweepScope::Due).unwrap();
     assert!(quiet.names().is_empty(), "nothing was due, so nothing said");
 }
 
@@ -407,8 +512,14 @@ fn a_verdict_taken_against_another_meta_schema_is_due_again() {
     point_at_installed_build(&mut config, storage.path());
     place_bin_project_mod(storage.path(), "stale-mod", &stale_bin());
     seed_library(&library, &config, vec![project_entry("id-1", "stale-mod")]);
-    library.sweep_mod_health(&config).unwrap();
-    assert_eq!(library.sweep_mod_health(&config).unwrap().checked, 0);
+    library.sweep_mod_health(&config, &SweepScope::Due).unwrap();
+    assert_eq!(
+        library
+            .sweep_mod_health(&config, &SweepScope::Due)
+            .unwrap()
+            .checked,
+        0
+    );
 
     let mut file = VerdictFile::load(storage.path());
     for verdict in file.verdicts.values_mut() {
@@ -416,5 +527,11 @@ fn a_verdict_taken_against_another_meta_schema_is_due_again() {
     }
     file.save(storage.path()).unwrap();
 
-    assert_eq!(library.sweep_mod_health(&config).unwrap().checked, 1);
+    assert_eq!(
+        library
+            .sweep_mod_health(&config, &SweepScope::Due)
+            .unwrap()
+            .checked,
+        1
+    );
 }

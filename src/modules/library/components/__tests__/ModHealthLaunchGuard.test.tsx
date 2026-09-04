@@ -58,6 +58,40 @@ describe("ModHealthLaunchGuard", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  /* Story: a mod whose worst finding is a warning loads and plays, so holding
+     a launch up over one teaches the reader to press through the ask that
+     matters - the same reason a disabled mod does not ask. */
+  it("launches straight away when nothing enabled stops the game loading", async () => {
+    const user = userEvent.setup();
+    show([verdict("a", "unrepairable", { severity: "warning" })]);
+
+    await user.click(press());
+
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/^Launch with/)).not.toBeInTheDocument();
+  });
+
+  /* A repair is one press, so it is worth offering before the launch whatever
+     the finding cost. */
+  it("still asks for a warning a repair can reach", async () => {
+    const user = userEvent.setup();
+    show([verdict("a", "repairable", { severity: "warning" })]);
+
+    await user.click(press());
+
+    expect(screen.getByText("Launch with 1 broken mod?")).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("counts only the mods it is asking about", async () => {
+    const user = userEvent.setup();
+    show([verdict("a", "unrepairable"), verdict("b", "unrepairable", { severity: "warning" })]);
+
+    await user.click(press());
+
+    expect(screen.getByText("Launch with 1 broken mod?")).toBeInTheDocument();
+  });
+
   it("asks before a launch that would carry a broken mod", async () => {
     const user = userEvent.setup();
     show([verdict("a", "repairable")]);

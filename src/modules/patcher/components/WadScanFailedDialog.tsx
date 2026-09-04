@@ -2,6 +2,7 @@ import { Copy, Package, Wrench } from "lucide-react";
 
 import { AlertBox, Button, Dialog, Spinner, useToast } from "@/components";
 import type { WadScanFailedPayload } from "@/lib/tauri";
+import { useQueuedDialog } from "@/stores";
 
 import { usePatcherStatus } from "../api/usePatcherStatus";
 import { useStopPatcher } from "../api/useStopPatcher";
@@ -38,10 +39,11 @@ function wadLabel(wad: string): string {
  */
 export function WadScanFailedDialog() {
   const { failure, clear } = useWadScanFailure();
+  const showing = useQueuedDialog("wad-scan-failed", failure !== null);
 
   // Render the content (and its mod/report queries) only while a failure is
   // active, so the dialog stays inert when idle.
-  if (!failure) return null;
+  if (!failure || !showing) return null;
 
   return <WadScanFailedContent failure={failure} onClose={clear} />;
 }
@@ -74,7 +76,7 @@ function WadScanFailedContent({
         onError: (error) => {
           // The injector may have already auto-stopped the thread by the time the
           // user clicks. A "not running" rejection here is a no-op, not a failure.
-          console.error("Failed to stop patcher:", error.message);
+          console.error("Failed to stop patcher:", error);
         },
       });
     }

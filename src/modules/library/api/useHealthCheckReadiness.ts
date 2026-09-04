@@ -14,12 +14,12 @@ const READINESS_POLL_MS = 1000;
  *
  * This answer is about a moment rather than a minute, so it keeps none of the
  * default staleness: a menu opened after the tables landed must not still be
- * saying they have not. That is only affordable because every caller sits
- * inside a popup, which is mounted while it is open and no longer - a hook on
- * something drawn per card would ask this once per card. While the tables are
- * landing it asks on a timer, so the row turns back into a command on its own
- * rather than on the next thing the reader does, and a sync started in Settings
- * starts that timer through its progress.
+ * saying they have not. That is only affordable because the callers are a
+ * handful of controls rather than something drawn per card, which would ask
+ * this once per card. While the tables are landing it asks on a timer, so the
+ * row turns back into a command on its own rather than on the next thing the
+ * reader does, and a sync started in Settings starts that timer through its
+ * progress.
  *
  * A first answer that has not arrived, or one that failed to, reads as ready.
  * The round trip is milliseconds and the menus that ask are opened by hand, so

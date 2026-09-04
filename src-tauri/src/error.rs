@@ -1,10 +1,11 @@
 //! How a domain error reaches the frontend.
 //!
 //! [`AppError`] itself lives in core and says only what went wrong. This module
-//! owns the IPC representation of it: a stable [`ErrorCode`] the frontend can
-//! match on, the [`AppErrorResponse`] payload, and the [`IpcResult`] envelope
-//! every command returns. The `From<AppError>` mapping below is the single place
-//! that decides which variants collapse to the same code and which carry context.
+//! owns the IPC representation of it: the [`AppErrorResponse`] payload, tagged
+//! on a stable `code` the frontend matches on and carrying the fields it
+//! translates over, and the [`IpcResult`] envelope every command returns. The
+//! `From<AppError>` mapping below is the single place that decides which
+//! variants collapse to the same code and which fields each carries.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -12,106 +13,95 @@ use ts_rs::TS;
 pub use ltk_manager_core::error::{
     AppError, AppResult, MutexResultExt, OverlayErrorCategory, Utf8PathExt,
 };
+use ltk_manager_core::launcher::LauncherError;
+use ltk_manager_core::patcher::PatcherError;
+use ltk_manager_core::workshop::WorkshopError;
 
-/// Error codes that can be communicated across the IPC boundary.
-/// These are serialized as SCREAMING_SNAKE_CASE for TypeScript consumption.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ErrorCode {
-    /// File system I/O error
-    Io,
-    /// JSON serialization/deserialization error
-    Serialization,
-    /// Error processing a .modpkg file
-    Modpkg,
-    /// League of Legends installation not found
-    LeagueNotFound,
-    /// Invalid file or directory path
-    InvalidPath,
-    /// Requested mod was not found
-    ModNotFound,
-    /// Validation failed (e.g., invalid settings)
-    ValidationFailed,
-    /// Internal state error (e.g., mutex poisoned)
-    InternalState,
-    /// Mutex lock failed (poisoned)
-    MutexLockFailed,
-    /// Unknown/unclassified error
-    Unknown,
-    /// Workshop directory not configured
-    WorkshopNotConfigured,
-    /// Workshop project not found
-    ProjectNotFound,
-    /// Workshop project already exists
-    ProjectAlreadyExists,
-    /// Failed to pack workshop project
-    PackFailed,
-    /// Error processing a .fantome file
-    Fantome,
-    /// WAD file error
-    Wad,
-    /// Patcher domain error. The specific variant is in `context.kind`.
-    Patcher,
-    /// ZIP error
-    Zip,
-    /// Library index was written by a newer app version
-    SchemaVersionTooNew,
-    /// Workshop domain error. The specific variant is in `context.kind`.
-    Workshop,
-    /// A launch failed. The specific variant is in `context.kind`.
-    ///
-    /// One code, not one per [`LauncherError`] variant. The whole error is
-    /// already serialized into the context, so a code per variant put the same
-    /// discriminant on the wire twice, and lossily: `SpawnFailed` and
-    /// `UnsupportedPlatform` shared one code that the context tells apart.
-    Launcher,
-    /// A hashtable cache operation failed. The message says which and why.
-    ///
-    /// One code, not one per `HashtableError` variant. Unlike the launcher's,
-    /// this error is not `Serialize`, so there is no context to carry the
-    /// variant and the message is where the detail rides.
-    Hashtable,
-    /// An asset could not be previewed. The message says why.
-    Preview,
-    /// An overlay build or analysis failed. The category is in `context.category`.
-    ///
-    /// One code, not one per category: the message already carries the
-    /// specific failure, and `ltk_overlay::Error` is `#[non_exhaustive]`, so
-    /// new categories arrive as [`OverlayErrorCategory::Other`] rather than
-    /// as codes the frontend has never heard of.
-    Overlay,
-}
+use crate::releases::{ReleaseFeedError, ReleaseFeedErrorKind};
 
-/// Structured error response sent over IPC.
-/// This provides rich error information to the frontend.
+/// What went wrong, as the fields the frontend translates over.
+///
+/// The frontend owns every sentence a user reads (ADR-0017), so no variant
+/// carries one. A `detail` is prose from outside the app, such as an OS or
+/// crate error, which the frontend draws as data under a title of its own.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, rename = "AppError")]
-#[serde(rename_all = "camelCase")]
-pub struct AppErrorResponse {
-    /// Machine-readable error code for pattern matching
-    pub code: ErrorCode,
-    /// Human-readable error message
-    pub message: String,
-    /// Optional contextual data (e.g., the invalid path, missing mod ID)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional, type = "unknown")]
-    pub context: Option<serde_json::Value>,
-}
-
-impl AppErrorResponse {
-    pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            context: None,
-        }
-    }
-
-    pub fn with_context(mut self, context: impl Serialize) -> Self {
-        self.context = serde_json::to_value(context).ok();
-        self
-    }
+#[serde(
+    tag = "code",
+    rename_all = "SCREAMING_SNAKE_CASE",
+    rename_all_fields = "camelCase"
+)]
+pub enum AppErrorResponse {
+    /// File system I/O failed.
+    Io { detail: String },
+    /// JSON could not be read or written.
+    Serialization { detail: String },
+    /// A `.modpkg` could not be processed.
+    Modpkg { detail: String },
+    /// No League of Legends installation is configured.
+    LeagueNotFound,
+    /// A file or directory path cannot be used.
+    InvalidPath { path: String },
+    /// No installed mod has this id.
+    ModNotFound { mod_id: String },
+    /// Input failed validation.
+    ValidationFailed { detail: String },
+    /// Internal state was not what the operation needed.
+    InternalState { detail: String },
+    /// A mutex was poisoned.
+    MutexLockFailed,
+    /// A failure with no code of its own.
+    Unknown { detail: String },
+    /// No workshop directory is configured.
+    WorkshopNotConfigured,
+    /// No workshop project has this name.
+    ProjectNotFound { project_name: String },
+    /// A workshop project with this name already exists.
+    ProjectAlreadyExists { project_name: String },
+    /// A workshop project could not be packed.
+    PackFailed { detail: String },
+    /// A `.fantome` could not be processed.
+    Fantome { detail: String },
+    /// A WAD could not be read or built.
+    Wad { detail: String },
+    /// The patcher refused or a start failed. The variant says which.
+    ///
+    /// One code, not one per [`PatcherError`] variant: the whole error travels,
+    /// so a code per variant would put the same discriminant on the wire twice.
+    Patcher { error: PatcherError },
+    /// A ZIP archive could not be processed.
+    Zip { detail: String },
+    /// The library index was written by a newer app version.
+    SchemaVersionTooNew {
+        file_version: u32,
+        max_supported: u32,
+    },
+    /// A workshop operation failed. The variant says which.
+    Workshop { error: WorkshopError },
+    /// A launch failed. The variant says which and carries its remedy's inputs.
+    Launcher { error: LauncherError },
+    /// A hashtable cache operation failed.
+    ///
+    /// `HashtableError` is not `Serialize`, so the detail is where the
+    /// variant's own words ride.
+    Hashtable { detail: String },
+    /// An asset could not be previewed.
+    Preview { detail: String },
+    /// An overlay build or analysis failed.
+    ///
+    /// One code with a category, not one per category: `ltk_overlay::Error`
+    /// is `#[non_exhaustive]`, so a new category arrives as
+    /// [`OverlayErrorCategory::Other`] rather than as a code the frontend has
+    /// never heard of.
+    Overlay {
+        category: OverlayErrorCategory,
+        detail: String,
+    },
+    /// The release feed could not be read. The kind says which remedy applies.
+    Releases {
+        kind: ReleaseFeedErrorKind,
+        detail: String,
+    },
 }
 
 /// Result type for IPC commands.
@@ -183,112 +173,67 @@ impl<T, E: Into<AppErrorResponse>> From<Result<T, E>> for IpcResult<T> {
 impl From<AppError> for AppErrorResponse {
     fn from(error: AppError) -> Self {
         match error {
-            AppError::Io(e) => AppErrorResponse::new(ErrorCode::Io, e.to_string()),
-
-            AppError::Serialization(e) => {
-                AppErrorResponse::new(ErrorCode::Serialization, e.to_string())
+            AppError::Io(e) => Self::Io {
+                detail: e.to_string(),
+            },
+            AppError::Serialization(e) => Self::Serialization {
+                detail: e.to_string(),
+            },
+            AppError::Modpkg(e) => Self::Modpkg {
+                detail: e.to_string(),
+            },
+            AppError::LeagueNotFound => Self::LeagueNotFound,
+            AppError::InvalidPath(path) => Self::InvalidPath { path },
+            AppError::ModNotFound(mod_id) => Self::ModNotFound { mod_id },
+            AppError::ValidationFailed(detail) => Self::ValidationFailed { detail },
+            AppError::InternalState(detail) => Self::InternalState { detail },
+            AppError::MutexLockFailed => Self::MutexLockFailed,
+            AppError::Other(detail) => Self::Unknown { detail },
+            AppError::WorkshopNotConfigured => Self::WorkshopNotConfigured,
+            AppError::ProjectNotFound(project_name) => Self::ProjectNotFound { project_name },
+            AppError::ProjectAlreadyExists(project_name) => {
+                Self::ProjectAlreadyExists { project_name }
             }
+            AppError::PackFailed(detail) => Self::PackFailed { detail },
+            AppError::Fantome(detail) => Self::Fantome { detail },
+            AppError::WadError(e) => Self::Wad {
+                detail: e.to_string(),
+            },
+            AppError::WadBuilderError(e) => Self::Wad {
+                detail: e.to_string(),
+            },
+            AppError::Patcher(error) => Self::Patcher { error },
+            AppError::Launcher(error) => Self::Launcher { error },
+            AppError::ZipError(e) => Self::Zip {
+                detail: e.to_string(),
+            },
+            AppError::SchemaVersionTooNew {
+                file_version,
+                max_supported,
+            } => Self::SchemaVersionTooNew {
+                file_version,
+                max_supported,
+            },
+            AppError::Workshop(error) => Self::Workshop { error },
+            AppError::Hashtable(e) => Self::Hashtable {
+                detail: e.to_string(),
+            },
+            AppError::Preview(e) => Self::Preview {
+                detail: e.to_string(),
+            },
+            AppError::Overlay(e) => Self::Overlay {
+                category: OverlayErrorCategory::from(&e),
+                detail: e.to_string(),
+            },
+        }
+    }
+}
 
-            AppError::Modpkg(e) => AppErrorResponse::new(ErrorCode::Modpkg, e.to_string()),
-
-            AppError::LeagueNotFound => {
-                AppErrorResponse::new(ErrorCode::LeagueNotFound, "League installation not found")
-            }
-
-            AppError::InvalidPath(path) => {
-                AppErrorResponse::new(ErrorCode::InvalidPath, format!("Invalid path: {}", path))
-                    .with_context(serde_json::json!({ "path": path }))
-            }
-
-            AppError::ModNotFound(id) => {
-                AppErrorResponse::new(ErrorCode::ModNotFound, format!("Mod not found: {}", id))
-                    .with_context(serde_json::json!({ "modId": id }))
-            }
-
-            AppError::ValidationFailed(msg) => {
-                AppErrorResponse::new(ErrorCode::ValidationFailed, msg)
-            }
-
-            AppError::InternalState(msg) => AppErrorResponse::new(ErrorCode::InternalState, msg),
-
-            AppError::MutexLockFailed => {
-                AppErrorResponse::new(ErrorCode::MutexLockFailed, "Failed to acquire mutex lock")
-            }
-
-            AppError::Other(msg) => AppErrorResponse::new(ErrorCode::Unknown, msg),
-
-            AppError::WorkshopNotConfigured => AppErrorResponse::new(
-                ErrorCode::WorkshopNotConfigured,
-                "Workshop directory not configured",
-            ),
-
-            AppError::ProjectNotFound(name) => AppErrorResponse::new(
-                ErrorCode::ProjectNotFound,
-                format!("Project not found: {}", name),
-            )
-            .with_context(serde_json::json!({ "projectName": name })),
-
-            AppError::ProjectAlreadyExists(name) => AppErrorResponse::new(
-                ErrorCode::ProjectAlreadyExists,
-                format!("Project already exists: {}", name),
-            )
-            .with_context(serde_json::json!({ "projectName": name })),
-
-            AppError::PackFailed(msg) => AppErrorResponse::new(ErrorCode::PackFailed, msg),
-
-            AppError::Fantome(msg) => AppErrorResponse::new(ErrorCode::Fantome, msg),
-
-            AppError::WadError(e) => AppErrorResponse::new(ErrorCode::Wad, e.to_string()),
-
-            AppError::WadBuilderError(e) => AppErrorResponse::new(ErrorCode::Wad, e.to_string()),
-
-            AppError::Patcher(patcher_err) => {
-                let mut response =
-                    AppErrorResponse::new(ErrorCode::Patcher, patcher_err.to_string());
-                response.context = serde_json::to_value(&patcher_err).ok();
-                response
-            }
-
-            // Unlike the patcher, each launcher failure gets its own code: the
-            // frontend offers a different remedy for each, so collapsing them
-            // into one code plus a `kind` would just move the switch.
-            AppError::Launcher(launcher_err) => {
-                let mut response =
-                    AppErrorResponse::new(ErrorCode::Launcher, launcher_err.to_string());
-                response.context = serde_json::to_value(&launcher_err).ok();
-                response
-            }
-
-            AppError::ZipError(e) => AppErrorResponse::new(ErrorCode::Zip, e.to_string()),
-
-            AppError::SchemaVersionTooNew { file_version, max_supported } => AppErrorResponse::new(
-                ErrorCode::SchemaVersionTooNew,
-                format!(
-                    "Your mod library was created by a newer version of the app (schema v{}). This version only supports up to v{}.",
-                    file_version, max_supported
-                ),
-            )
-            .with_context(serde_json::json!({ "fileVersion": file_version, "maxSupported": max_supported })),
-
-            AppError::Workshop(workshop_err) => {
-                let mut response = AppErrorResponse::new(ErrorCode::Workshop, workshop_err.to_string());
-                response.context = serde_json::to_value(&workshop_err).ok();
-                response
-            }
-
-            AppError::Hashtable(hashtable_err) => {
-                AppErrorResponse::new(ErrorCode::Hashtable, hashtable_err.to_string())
-            }
-
-            AppError::Preview(preview_err) => {
-                AppErrorResponse::new(ErrorCode::Preview, preview_err.to_string())
-            }
-
-            AppError::Overlay(overlay_err) => {
-                let category = OverlayErrorCategory::from(&overlay_err);
-                AppErrorResponse::new(ErrorCode::Overlay, overlay_err.to_string())
-                    .with_context(serde_json::json!({ "category": category }))
-            }
+impl From<ReleaseFeedError> for AppErrorResponse {
+    fn from(error: ReleaseFeedError) -> Self {
+        Self::Releases {
+            kind: error.kind(),
+            detail: error.to_string(),
         }
     }
 }

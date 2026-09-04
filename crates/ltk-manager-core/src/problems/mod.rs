@@ -25,6 +25,7 @@ pub mod game;
 pub mod names;
 pub mod preserve;
 pub mod rules;
+pub mod walk;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

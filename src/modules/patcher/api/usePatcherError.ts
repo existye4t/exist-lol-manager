@@ -1,22 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
 
 import { useToast } from "@/components";
-import type { AppError, OverlayErrorCategory, PatcherError } from "@/lib/tauri";
+import { describeError, errorSummary, injectionStageTitle, m } from "@/i18n";
+import type { AppError } from "@/lib/tauri";
 import { useTauriEvent } from "@/lib/useTauriEvent";
 import { type PatcherFailure, type PatcherFailureStage, usePatcherFailureStore } from "@/stores";
-import { getOverlayErrorCategory } from "@/utils/errors";
-
-type InjectionFailed = Extract<PatcherError, { kind: "INJECTION_FAILED" }>;
-
-const failureTitles: Record<PatcherFailureStage, string> = {
-  BUILD: "Overlay Build Failure",
-  HOST: "Injection Host Failure",
-  INJECTION: "DLL Injection Failure",
-};
 
 /** The failed-start line's title for a stage, in the words the verdict uses. */
 export function patcherFailureTitle(stage: PatcherFailureStage): string {
-  return failureTitles[stage];
+  return stage === "BUILD" ? m["error.OVERLAY.title"]() : injectionStageTitle(stage);
 }
 
 /**
@@ -29,15 +21,6 @@ export function patcherFailureTab(stage: PatcherFailureStage): "games" | "system
   return stage === "HOST" ? "system" : "games";
 }
 
-function isInjectionFailed(context: unknown): context is InjectionFailed {
-  return (
-    typeof context === "object" &&
-    context !== null &&
-    "kind" in context &&
-    context.kind === "INJECTION_FAILED"
-  );
-}
-
 /**
  * The start failure a `patcher-error` carries, or `null` when it failed nothing.
  *
@@ -47,32 +30,16 @@ function isInjectionFailed(context: unknown): context is InjectionFailed {
  * of any other kind is a refusal such as `BUSY`, which no start failed on.
  */
 export function classifyPatcherError(error: AppError): PatcherFailure | null {
-  if (isInjectionFailed(error.context)) {
-    return { stage: error.context.stage, message: error.context.message };
+  if (error.code === "PATCHER") {
+    if (error.error.kind !== "INJECTION_FAILED") return null;
+    return { stage: error.error.stage, message: error.error.message };
   }
-  if (error.code === "PATCHER") return null;
-  const category = getOverlayErrorCategory(error);
   return {
     stage: "BUILD",
-    message: error.message,
-    ...(category && { title: overlayFailureTitles[category] }),
+    message: errorSummary(error),
+    ...(error.code === "OVERLAY" && { title: describeError(error).title }),
   };
 }
-
-/**
- * Failure titles per overlay category, each naming what to go fix.
- *
- * These exist so a wrong game dir does not read as a broken mod. A failure
- * with no category keeps the stage's generic title.
- */
-const overlayFailureTitles: Record<OverlayErrorCategory, string> = {
-  GAME_DIR: "Game Install Problem",
-  MOD_CONTENT: "Mod Content Problem",
-  WAD_LIMIT: "Mod Too Large",
-  CORRUPT: "Corrupt Game Files",
-  BUG: "Overlay Builder Bug",
-  OTHER: "Overlay Build Failure",
-};
 
 /**
  * Every `patcher-error`, as a toast and the session bar's failed-start line.
@@ -90,7 +57,7 @@ export function usePatcherError() {
     if (failure) setFailure(failure);
 
     if (!failure || failure.stage === "BUILD") {
-      toast.error(failure?.title ?? "Patcher Error", error.message, { notify: true });
+      toast.error(failure?.title ?? m.patcher_error_title(), errorSummary(error), { notify: true });
       return;
     }
 

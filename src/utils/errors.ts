@@ -1,91 +1,26 @@
-import { z } from "zod";
+import type { AppError } from "@/lib/bindings";
 
-import type { AppError, ErrorCode, OverlayErrorCategory } from "@/lib/bindings";
+export type { AppError, OverlayErrorCategory } from "@/lib/bindings";
 
-export type { AppError, ErrorCode, OverlayErrorCategory } from "@/lib/bindings";
+/** The `code` tag of an `AppError`, the name a caller branches on. */
+export type ErrorCode = AppError["code"];
 
-/**
- * Type guard to check if an error has a specific code.
- */
+/** Narrows `error` to the variant tagged `code`, so its fields are in reach. */
 export function hasErrorCode<T extends ErrorCode>(
   error: AppError,
   code: T,
-): error is AppError & { code: T } {
+): error is Extract<AppError, { code: T }> {
   return error.code === code;
 }
 
-/**
- * Schema for INVALID_PATH error context
- */
-const InvalidPathContextSchema = z.object({
-  path: z.string(),
-});
-
-/**
- * Context type for INVALID_PATH errors
- */
-export type InvalidPathContext = z.infer<typeof InvalidPathContextSchema>;
-
-/**
- * Schema for MOD_NOT_FOUND error context
- */
-const ModNotFoundContextSchema = z.object({
-  modId: z.string(),
-});
-
-/**
- * Context type for MOD_NOT_FOUND errors
- */
-export type ModNotFoundContext = z.infer<typeof ModNotFoundContextSchema>;
-
-/**
- * Get typed and validated context from an INVALID_PATH error.
- * Returns undefined if the error code doesn't match or context validation fails.
- */
-export function getInvalidPathContext(error: AppError): InvalidPathContext | undefined {
-  if (error.code !== "INVALID_PATH" || !error.context) {
-    return undefined;
-  }
-  const result = InvalidPathContextSchema.safeParse(error.context);
-  return result.success ? result.data : undefined;
+/** Whether a thrown value is a backend error rather than a JS `Error`. */
+export function isAppError(error: unknown): error is AppError {
+  return (
+    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+  );
 }
 
-/**
- * Get typed and validated context from a MOD_NOT_FOUND error.
- * Returns undefined if the error code doesn't match or context validation fails.
- */
-export function getModNotFoundContext(error: AppError): ModNotFoundContext | undefined {
-  if (error.code !== "MOD_NOT_FOUND" || !error.context) {
-    return undefined;
-  }
-  const result = ModNotFoundContextSchema.safeParse(error.context);
-  return result.success ? result.data : undefined;
-}
-
-/**
- * Schema for OVERLAY error context
- */
-const overlayErrorCategories = [
-  "GAME_DIR",
-  "MOD_CONTENT",
-  "WAD_LIMIT",
-  "CORRUPT",
-  "BUG",
-  "OTHER",
-] as const satisfies readonly OverlayErrorCategory[];
-
-const OverlayContextSchema = z.object({
-  category: z.enum(overlayErrorCategories),
-});
-
-/**
- * Get the failure category from an OVERLAY error.
- * Returns undefined if the error code doesn't match or context validation fails.
- */
-export function getOverlayErrorCategory(error: AppError): OverlayErrorCategory | undefined {
-  if (error.code !== "OVERLAY" || !error.context) {
-    return undefined;
-  }
-  const result = OverlayContextSchema.safeParse(error.context);
-  return result.success ? result.data.category : undefined;
+/** Extract a human-readable message from an AppError. */
+export function getAppErrorMessage(error: AppError): string {
+  return "detail" in error ? error.detail : error.code;
 }

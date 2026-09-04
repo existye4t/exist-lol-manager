@@ -1082,7 +1082,7 @@ is [MOD_HEALTH.md](MOD_HEALTH.md).
 6. A second rule, which is what proves the model was generic
 
 Steps 1 to 3 are the ones the deadline names. `ltk_meta` is not a dependency of this workspace
-yet. It is `MIT OR Apache-2.0`, which is the workspace's own license, so adding it costs a
+yet. It is `MIT OR Apache-2.0`, which is GPL-compatible, so adding it costs a
 `pnpm generate:licenses` and nothing else.
 
 ## Open questions

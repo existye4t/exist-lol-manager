@@ -15,12 +15,11 @@
 
 use std::collections::HashMap;
 
-use indexmap::IndexMap;
 use ltk_hash::{BinHash, Hash as _, WadHash};
-use ltk_meta::PropertyValueEnum;
-use ltk_meta::property::values;
+use ltk_meta::property::Kind;
+use ltk_meta::walk::{Leaf, Node, TreeNode as _, TreeValue, Visit, Visitor};
 
-use crate::problems::{ProjectFiles, budget};
+use crate::problems::{ProjectFiles, budget, walk};
 
 /// `BankUnit`, the class naming the files one unit of a skin's audio needs.
 const BANK_UNIT: BinHash = BinHash(0xa441_6515);
@@ -49,8 +48,8 @@ impl BankUnits {
             &handles,
             budget::files_at_once(),
             |handle| handle.size_bytes().saturating_mul(budget::BIN_EXPANSION),
-            |handle| match handle.bin() {
-                Ok(bin) => Some(asked_in(&bin)),
+            |handle| match handle.bin().and_then(|bin| asked_in(&bin)) {
+                Ok(paths) => Some(paths),
                 Err(e) => {
                     tracing::debug!(
                         "{} names no bank units it can be read for: {e}",
@@ -97,67 +96,35 @@ impl BankUnits {
 }
 
 /// Every path the bank units of one bin name, each with the hash of it.
-fn asked_in(bin: &ltk_meta::BinFile) -> Vec<(WadHash, String)> {
-    let mut found = Vec::new();
-    for object in bin.objects().values() {
-        walk(object.class_hash, &object.properties, &mut found);
-    }
-    found
+fn asked_in(bin: &ltk_meta::BinFile) -> Result<Vec<(WadHash, String)>, String> {
+    let mut asked = Asked::default();
+    walk::bin(bin, &mut asked).map_err(|e| e.to_string())?;
+    Ok(asked.0)
 }
 
-/// Read one object-like node, and descend into whatever it holds.
-fn walk(
-    class: BinHash,
-    properties: &IndexMap<BinHash, PropertyValueEnum>,
-    found: &mut Vec<(WadHash, String)>,
-) {
-    if class == BANK_UNIT
-        && let Some(paths) = properties.get(&BANK_PATH)
-    {
-        found.extend(strings_in(paths).map(|path| (WadHash::hash_str(path), path.to_owned())));
-    }
+/// The paths every `BankUnit` node names, wherever the node sits.
+#[derive(Debug, Default)]
+struct Asked(Vec<(WadHash, String)>);
 
-    for value in properties.values() {
-        descend(value, found);
-    }
-}
+impl<'a, V: TreeValue<'a>> Visitor<'a, V> for Asked {
+    type Error = ltk_meta::Error;
 
-/// The strings a list property holds, ordered or not.
-fn strings_in(value: &PropertyValueEnum) -> impl Iterator<Item = &str> {
-    let items = match value {
-        PropertyValueEnum::Container(items) => Some(items),
-        PropertyValueEnum::UnorderedContainer(items) => Some(&items.0),
-        _ => None,
-    };
-    items
-        .into_iter()
-        .flat_map(values::Container::items)
-        .filter_map(|held| Some(held.get::<values::String>()?.value.as_str()))
-}
-
-/// Walk into whatever object-like nodes `value` holds.
-fn descend(value: &PropertyValueEnum, found: &mut Vec<(WadHash, String)>) {
-    match value {
-        PropertyValueEnum::Struct(inner) => walk(inner.class_hash, &inner.properties, found),
-        PropertyValueEnum::Embedded(inner) => walk(inner.0.class_hash, &inner.0.properties, found),
-        PropertyValueEnum::Container(items) => descend_container(items, found),
-        PropertyValueEnum::UnorderedContainer(items) => descend_container(&items.0, found),
-        PropertyValueEnum::Optional(inner) => {
-            if let Some(held) = inner.value() {
-                descend(held, found);
+    fn enter_node(&mut self, node: &Node<'_, 'a, V>) -> Result<Visit, ltk_meta::Error> {
+        if node.class_hash() != BANK_UNIT {
+            return Ok(Visit::Continue);
+        }
+        let Some(paths) = node.inner().property(BANK_PATH)? else {
+            return Ok(Visit::Continue);
+        };
+        if !matches!(paths.kind(), Kind::Container | Kind::UnorderedContainer) {
+            return Ok(Visit::Continue);
+        }
+        for item in paths.children()? {
+            let (_, held) = item?;
+            if let Some(Leaf::String(path)) = held.leaf()? {
+                self.0.push((WadHash::hash_str(path), path.to_owned()));
             }
         }
-        PropertyValueEnum::Map(map) => {
-            for (_, held) in map.entries() {
-                descend(held, found);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn descend_container(items: &values::Container, found: &mut Vec<(WadHash, String)>) {
-    for inner in items.items() {
-        descend(inner, found);
+        Ok(Visit::Continue)
     }
 }

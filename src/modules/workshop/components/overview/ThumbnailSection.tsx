@@ -2,6 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Image, Pencil, Trash2 } from "lucide-react";
 
 import { Button, Menu, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import type { WorkshopProject } from "@/lib/tauri";
 import {
   useProjectThumbnail,
@@ -32,7 +33,7 @@ export function ThumbnailSection({ project }: ThumbnailSectionProps) {
     if (file) {
       setThumbnail.mutate(
         { projectPath: project.path, imagePath: file },
-        { onError: (err) => toast.error(`Failed to set thumbnail: ${err.message}`) },
+        { onError: (err) => toast.error(`Failed to set thumbnail: ${errorSummary(err)}`) },
       );
     }
   }
@@ -42,7 +43,7 @@ export function ThumbnailSection({ project }: ThumbnailSectionProps) {
       { projectPath: project.path },
       {
         onSuccess: () => toast.success("Thumbnail removed"),
-        onError: (err) => toast.error(`Failed to remove thumbnail: ${err.message}`),
+        onError: (err) => toast.error(`Failed to remove thumbnail: ${errorSummary(err)}`),
       },
     );
   }

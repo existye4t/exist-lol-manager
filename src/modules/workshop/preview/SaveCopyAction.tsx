@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { save } from "@tauri-apps/plugin-dialog";
 
 import { IconButton, Tooltip, useToast } from "@/components";
+import { errorSummary } from "@/i18n";
 import { api, type AppError, type AssetRef } from "@/lib/tauri";
 import { mutationFn } from "@/utils/query";
 
@@ -26,7 +27,7 @@ export function SaveCopyAction({ asset, name }: SaveCopyActionProps) {
   const saveCopy = useMutation<void, AppError, string>({
     mutationFn: mutationFn((destination: string) => api.saveAssetCopy(asset, destination)),
     onSuccess: () => success("Saved a copy", name),
-    onError: (e) => error("Could not save a copy", e.message),
+    onError: (e) => error("Could not save a copy", errorSummary(e)),
   });
 
   async function handleClick() {

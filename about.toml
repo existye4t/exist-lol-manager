@@ -20,6 +20,6 @@ accepted = [
     "CC0-1.0",
     "Unicode-3.0",
     "MPL-2.0",
-    # ltk_io_ext — first-party LeagueToolkit crate
-    "AGPL-3.0-only",
+    # The workspace crates, which cargo-about lists alongside their dependencies
+    "GPL-3.0-or-later",
 ]

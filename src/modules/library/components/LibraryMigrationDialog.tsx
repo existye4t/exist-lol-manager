@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 
 import { Accordion, Button, Dialog, ShockedPoroDuotoneIcon } from "@/components";
 import { type FailedConversion } from "@/lib/tauri";
+import { useQueuedDialog } from "@/stores";
 
 import { useLayoutMigration } from "../api";
 
@@ -18,8 +19,10 @@ export function LibraryMigrationDialog() {
   const report = useLayoutMigration();
   const [dismissed, setDismissed] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
+  const failed = !dismissed && report !== null && report.failed.length > 0;
+  const showing = useQueuedDialog("library-migration", failed);
 
-  if (dismissed || !report || report.failed.length === 0) return null;
+  if (!showing || !report) return null;
 
   const groups = groupByError(report.failed);
   const plural = report.failed.length === 1 ? "mod" : "mods";
