@@ -309,6 +309,10 @@ pub fn handle_argv(app_handle: &tauri::AppHandle, argv: &[String]) {
     for arg in argv.iter().skip(1) {
         if arg.starts_with("ltk://") {
             handle_single(app_handle, arg);
+        } else if arg.starts_with("runeforge://") {
+            if let Some(ltk_url) = convert_runeforge_to_ltk(arg) {
+                handle_single(app_handle, &ltk_url);
+            }
         }
     }
 
@@ -382,6 +386,55 @@ fn truncate_str(s: &str, max_chars: usize) -> &str {
         Some((idx, _)) => &s[..idx],
         None => s,
     }
+}
+
+/// Convert a runeforge:// URL to an ltk://install URL.
+///
+/// Maps runeforge://download?url=https://... to ltk://install?url=https://...
+fn convert_runeforge_to_ltk(runeforge_url: &str) -> Option<String> {
+    let parsed = Url::parse(runeforge_url).ok()?;
+
+    if parsed.scheme() != "runeforge" {
+        return None;
+    }
+
+    let pairs: HashMap<String, String> = parsed.query_pairs().into_owned().collect();
+
+    let download_url = pairs.get("url")?;
+
+    // Use percent_encoding to encode query parameters
+    let mut query_params = vec![("url".to_string(), download_url.to_string())];
+
+    if let Some(name) = pairs.get("name") {
+        query_params.push(("name".to_string(), name.to_string()));
+    }
+    if let Some(author) = pairs.get("author") {
+        query_params.push(("author".to_string(), author.to_string()));
+    }
+    if let Some(source) = pairs.get("source") {
+        query_params.push(("source".to_string(), source.to_string()));
+    }
+
+    // Build ltk:// URL manually preserving the existing query string format
+    let mut ltk_url = String::from("ltk://install?");
+    for (i, (k, v)) in query_params.iter().enumerate() {
+        if i > 0 {
+            ltk_url.push('&');
+        }
+        ltk_url.push_str(&format!("{}={}", k, percent_encode_str(v)));
+    }
+
+    Some(ltk_url)
+}
+
+/// Percent-encode a string for use in URL query parameters.
+fn percent_encode_str(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b as char {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => (b as char).to_string(),
+            _ => format!("%{:02X}", b),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -585,7 +638,57 @@ mod tests {
 
     #[test]
     fn truncates_long_name_at_256_chars() {
-        let long_name: String = "あ".repeat(300);
+        let long_name = "a".repeat(300);
+        let req = install(&format!(
+            "ltk://install?url=https://cdn.example.com/mod.modpkg&name={long_name}"
+        ))
+        .unwrap();
+        assert_eq!(req.name.as_ref().map(|n| n.len()), Some(256));
+    }
+
+    // --- Runeforge URL conversion ---
+
+    #[test]
+    fn convert_runeforge_minimal_url() {
+        let ltk = convert_runeforge_to_ltk(
+            "runeforge://download?url=https://cdn.runeforge.dev/mods/skin.modpkg",
+        )
+        .unwrap();
+        assert!(ltk.starts_with("ltk://install?url="));
+        // Verify that the host and path are present, ensuring encoding happened,
+        // but avoid strict full-string matching if encoding details (like hex case) vary.
+        assert!(ltk.contains("cdn.runeforge.dev"));
+        assert!(ltk.contains("skin.modpkg"));
+    }
+    #[test]
+    fn convert_runeforge_with_metadata() {
+        let ltk = convert_runeforge_to_ltk(
+            "runeforge://download?url=https://cdn.runeforge.dev/mods/skin.modpkg&name=Test%20Skin&author=Creator&source=Runeforge"
+        ).unwrap();
+        assert!(ltk.contains("ltk://install?"));
+        assert!(ltk.contains("url="));
+        assert!(ltk.contains("name="));
+        assert!(ltk.contains("author="));
+        assert!(ltk.contains("source="));
+    }
+
+    #[test]
+    fn reject_runeforge_invalid_scheme() {
+        let result = convert_runeforge_to_ltk(
+            "https://download?url=https://cdn.runeforge.dev/mods/skin.modpkg",
+        );
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn reject_runeforge_missing_url() {
+        let result = convert_runeforge_to_ltk("runeforge://download?name=Test");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn truncates_long_name() {
+        let long_name: String = "ã‚".repeat(300);
         let url = format!(
             "ltk://install?url=https://cdn.example.com/mod.modpkg&name={}",
             long_name

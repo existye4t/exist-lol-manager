@@ -30,15 +30,16 @@ impl ModLibrary {
         std::thread::spawn(move || library.maintain(&config, tables_installed));
     }
 
-    /// The four startup passes, in the order their dependencies demand.
+    /// The five startup passes, in the order their dependencies demand.
     ///
     /// The staging sweep goes first because startup is the one moment nothing
     /// can be mid-install, which is what makes clearing another process's
     /// staging directories safe. The layout migration goes before
     /// reconciliation because reconciliation stands down until the migration
     /// pass has reported — it would read a mod mid-move as an orphan. The
-    /// health sweep goes last because it reads every mod's content, and the
-    /// three before it decide where that content is.
+    /// patcher state reconciliation goes after reconciliation to validate mod
+    /// apply state against the actual profile. The health sweep goes last
+    /// because it reads every mod's content.
     ///
     /// The hashtable sync sits immediately in front of the sweep rather than at
     /// the head of the pass, because it is the only one of the four that waits
@@ -68,6 +69,13 @@ impl ModLibrary {
             }
         };
 
+        // Validate that apply state is consistent after reconciliation.
+        // If a patcher session crashed, enabled_mods might reference mods
+        // that don't exist anymore or have invalid state.
+        if let Err(e) = self.reconcile_patcher_state(config) {
+            tracing::warn!("Failed to reconcile patcher state on startup: {}", e);
+        }
+
         // Announced before the health sweep rather than after it: the sweep
         // reads every mod and the library view has no reason to wait on that to
         // draw what the two passes above just changed.
@@ -85,6 +93,14 @@ impl ModLibrary {
             // Whoever is waiting on an answer has to get one, or it waits for
             // the rest of the session.
             self.record_health_sweep(HealthSweepState::Idle);
+        }
+
+        // Always emit LibraryChanged at the end of startup, even if nothing
+        // above changed. The frontend may have called get_installed_mods
+        // before reconciliation completed, so this signals that startup
+        // maintenance is complete and queries should be refreshed.
+        if !migrated && !reconciled {
+            self.events.emit(BackendEvent::LibraryChanged);
         }
     }
 }
