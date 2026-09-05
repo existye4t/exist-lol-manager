@@ -386,15 +386,24 @@ jobs:
         shell: pwsh
 
       - name: Create/Update GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.check-upstream.outputs.upstream_version }}
-          target_commitish: ${{ needs.sync-and-validate.outputs.merge_commit_sha }}
-          name: Exist Manager
-          body_path: .github/workflows/release_notes.md
-          files: target/release/Exist-Manager-v${{ needs.check-upstream.outputs.upstream_version }}.exe
-          draft: false
-          prerelease: false
+        run: |
+          $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
+          $MERGE_SHA = "${{ needs.sync-and-validate.outputs.merge_commit_sha }}"
+          $EXE_PATH = "target/release/Exist-Manager-v$($UPSTREAM_VERSION.TrimStart('v')).exe"
+          $REPO = "${{ env.EXIST_REPO }}"
+          
+          # Check if release already exists
+          if (gh release view $UPSTREAM_VERSION --repo $REPO 2>$null) {
+            Write-Host "Release $UPSTREAM_VERSION already exists, updating..."
+            gh release edit $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md
+          } else {
+            Write-Host "Creating new release $UPSTREAM_VERSION..."
+            gh release create $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md --target $MERGE_SHA
+          }
+          
+          # Upload the asset
+          gh release upload $UPSTREAM_VERSION --repo $REPO $EXE_PATH --clobber
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
