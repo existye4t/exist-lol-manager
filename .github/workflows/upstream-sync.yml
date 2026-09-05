@@ -48,7 +48,7 @@ jobs:
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/LeagueToolkit/ltk-manager.git || true
-          git fetch upstream --tags --prune
+          git fetch upstream --tags --prune --force
 
       - name: Get current Exist LTK version
         id: get_current_version
@@ -76,7 +76,7 @@ jobs:
           if [ -z "$UPSTREAM_RELEASE" ]; then
             echo "API failed, trying git ls-remote fallback..."
             # Fallback: get latest stable tag from upstream remote
-            git fetch upstream --tags --prune 2>/dev/null || true
+            git fetch upstream --tags --prune --force 2>/dev/null || true
             UPSTREAM_RELEASE=$(git ls-remote --tags --sort=-v:refname upstream 2>/dev/null | grep -E '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | cut -d/ -f3 || echo "")
             echo "git ls-remote result: '$UPSTREAM_RELEASE'"
           fi
