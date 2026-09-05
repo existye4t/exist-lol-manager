@@ -267,11 +267,14 @@ jobs:
           cargo check --workspace
           cargo test --workspace
 
-      - name: Setup Node.js and pnpm
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
 
       - name: Run frontend validation checks
         run: |
