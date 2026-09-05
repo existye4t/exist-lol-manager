@@ -61,7 +61,8 @@ jobs:
         id: get_upstream_version
         run: |
           # Get the latest stable release from upstream (not pre-release, not draft)
-          UPSTREAM_RELEASE=$(gh release list --repo LeagueToolkit/ltk-manager --limit 5 --json tagName,isDraft,isPrerelease --jq 'map(select(.isDraft == false and .isPrerelease == false)) | .[0].tagName // empty' 2>/dev/null || echo "")
+          # gh release list returns oldest first, so use [-1] for latest
+          UPSTREAM_RELEASE=$(gh release list --repo LeagueToolkit/ltk-manager --limit 10 --json tagName,isDraft,isPrerelease --jq 'map(select(.isDraft == false and .isPrerelease == false)) | .[-1].tagName // empty' 2>/dev/null || echo "")
           
           if [ -z "$UPSTREAM_RELEASE" ]; then
             # Fallback: get latest stable tag
