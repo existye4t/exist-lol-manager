@@ -1,24 +1,42 @@
-name: Upstream Sync Check
+name: Upstream Sync & Auto Release
 
 on:
   schedule:
     # Run daily at 03:00 UTC
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force sync even if version matches'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: true
 
 permissions:
   contents: write
   pull-requests: write
+  issues: write
+
+env:
+  UPSTREAM_REPO: LeagueToolkit/ltk-manager
+  EXIST_REPO: existye4t/exist-lol-manager
+  DEFAULT_BRANCH: exist-lol-manager
 
 jobs:
   check-upstream:
     name: Check for upstream updates
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     outputs:
       upstream_version: ${{ steps.get_upstream_version.outputs.version }}
       current_version: ${{ steps.get_current_version.outputs.version }}
       has_update: ${{ steps.compare_versions.outputs.has_update }}
+      release_tag: ${{ steps.get_upstream_version.outputs.release_tag }}
+      is_stable: ${{ steps.get_upstream_version.outputs.is_stable }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,7 +52,6 @@ jobs:
       - name: Get current Exist LTK version
         id: get_current_version
         run: |
-          # Extract version from src-tauri/Cargo.toml
           VERSION=$(grep '^version =' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Current Exist LTK version: $VERSION"
@@ -42,20 +59,37 @@ jobs:
       - name: Get latest upstream LTK release
         id: get_upstream_version
         run: |
-          # Get the latest release tag from upstream
-          UPSTREAM_VERSION=$(gh release list --repo LeagueToolkit/ltk-manager --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-          if [ -z "$UPSTREAM_VERSION" ]; then
-            # Fallback: get latest tag
-            UPSTREAM_VERSION=$(git ls-remote --tags --sort=-v:refname upstream | head -1 | cut -d/ -f3)
+          # Get the latest stable release from upstream (not pre-release, not draft)
+          UPSTREAM_RELEASE=$(gh release list --repo LeagueToolkit/ltk-manager --limit 5 --json tagName,isDraft,isPrerelease --jq 'map(select(.isDraft == false and .isPrerelease == false)) | .[0].tagName // empty' 2>/dev/null || echo "")
+          
+          if [ -z "$UPSTREAM_RELEASE" ]; then
+            # Fallback: get latest stable tag
+            UPSTREAM_RELEASE=$(git ls-remote --tags --sort=-v:refname upstream | grep -E '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | cut -d/ -f3)
           fi
-          echo "version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
-          echo "Latest upstream LTK version: $UPSTREAM_VERSION"
+          
+          # Determine if it's a stable release (not alpha/beta/rc)
+          IS_STABLE="false"
+          if echo "$UPSTREAM_RELEASE" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            IS_STABLE="true"
+          fi
+          
+          echo "version=$UPSTREAM_RELEASE" >> $GITHUB_OUTPUT
+          echo "is_stable=$IS_STABLE" >> $GITHUB_OUTPUT
+          echo "Latest upstream LTK version: $UPSTREAM_RELEASE (stable: $IS_STABLE)"
 
       - name: Compare versions
         id: compare_versions
         run: |
           CURRENT="${{ steps.get_current_version.outputs.version }}"
           UPSTREAM="${{ steps.get_upstream_version.outputs.version }}"
+          IS_STABLE="${{ steps.get_upstream_version.outputs.is_stable }}"
+          
+          if [ "$IS_STABLE" != "true" ]; then
+            echo "has_update=false" >> $GITHUB_OUTPUT
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+            echo "Upstream version is not a stable release: $UPSTREAM"
+            exit 0
+          fi
           
           # Remove 'v' prefix if present for comparison
           CURRENT_CLEAN=${CURRENT#v}
@@ -69,15 +103,59 @@ jobs:
             echo "Update available: $CURRENT_CLEAN -> $UPSTREAM_CLEAN"
           fi
 
-      - name: Exit if no update
-        if: ${{ steps.compare_versions.outputs.has_update == 'false' }}
+      - name: Exit if no update or not stable
+        if: ${{ steps.compare_versions.outputs.has_update == 'false' || steps.get_upstream_version.outputs.is_stable != 'true' }}
         run: |
-          echo "No upstream update needed"
+          if [ "${{ steps.get_upstream_version.outputs.is_stable }}" != "true" ]; then
+            echo "Upstream version is not a stable release - skipping"
+          else
+            echo "No upstream update needed"
+          fi
           exit 0
 
-      - name: Create sync branch
+      - name: Check if release already exists
+        id: check_existing_release
         run: |
           UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
+          # Check if tag already exists locally or remotely
+          if git rev-parse -q --verify "refs/tags/${UPSTREAM_VERSION}" >/dev/null 2>&1; then
+            echo "tag_exists_locally=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag_exists_locally=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check if release already exists on GitHub
+          if gh release view "${UPSTREAM_VERSION}" --repo ${{ env.EXIST_REPO }} >/dev/null 2>&1; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+  sync-and-validate:
+    name: Sync and Validate
+    needs: check-upstream
+    if: ${{ needs.check-upstream.outputs.has_update == 'true' && needs.check-upstream.outputs.is_stable == 'true' && needs.check-upstream.outputs.release_exists == 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      merge_commit_sha: ${{ steps.merge_and_commit.outputs.sha }}
+      sync_branch: ${{ steps.create_branch.outputs.branch_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/LeagueToolkit/ltk-manager.git || true
+          git fetch upstream --tags --prune
+
+      - name: Create sync branch
+        id: create_branch
+        run: |
+          UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
           BRANCH_NAME="upstream-sync/${UPSTREAM_VERSION}"
           
           # Check if branch already exists
@@ -87,152 +165,202 @@ jobs:
           else
             git checkout -b $BRANCH_NAME
           fi
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       - name: Checkout upstream release tag
-        id: checkout_release
-        if: ${{ steps.compare_versions.outputs.has_update == 'true' }}
         run: |
-          UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
-          
-          # Checkout the specific release tag instead of main
-          # This ensures we only sync the stable released version
-          git checkout -b upstream-sync/${UPSTREAM_VERSION} ${UPSTREAM_VERSION} || {
-            echo "Failed to checkout tag ${UPSTREAM_VERSION}" >> $GITHUB_OUTPUT
-            exit 1
-          }
-          echo "checked_out=true" >> $GITHUB_OUTPUT
+          UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
+          git fetch upstream --tags --prune
+          git checkout ${UPSTREAM_VERSION} -b upstream-tag-${UPSTREAM_VERSION}
 
       - name: Merge upstream release into sync branch
-        id: merge
-        if: ${{ steps.checkout_release.outputs.checked_out == 'true' }}
+        id: merge_upstream
         run: |
-          UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
+          UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
           
-          # Create sync branch from current HEAD
-          git checkout -b upstream-sync/${UPSTREAM_VERSION} || {
-            git checkout upstream-sync/${UPSTREAM_VERSION}
-          }
-          
-          # Merge the checked-out release tag
+          # Merge the upstream release tag
           git merge ${UPSTREAM_VERSION} --no-edit -m "chore: sync LTK upstream to ${UPSTREAM_VERSION}" || {
             echo "conflicts=true" >> $GITHUB_OUTPUT
-            echo "::warning::Merge conflicts detected - manual resolution required"
-            exit 0
+            echo "::warning::Merge conflicts detected - automatic resolution failed"
+            exit 1
           }
           echo "conflicts=false" >> $GITHUB_OUTPUT
 
-      - name: Update Exist version references
-        if: ${{ steps.merge.outputs.conflicts != 'true' }}
+      - name: Handle merge conflicts
+        if: ${{ steps.merge_upstream.outputs.conflicts == 'true' }}
         run: |
-          UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
-          
-          # Update version in src-tauri/Cargo.toml if it changed
-          CURRENT_VERSION=$(grep '^version =' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Merge conflicts detected - stopping workflow"
+          echo "Manual resolution required"
+          # List conflicting files
+          git diff --name-only --diff-filter=U
+          exit 1
+
+      - name: Preserve Exist-specific files
+        run: |
+          # Ensure Exist-specific files are not overwritten
+          # These files should not be modified by upstream merge
+          git checkout HEAD -- src/lib/tauri.ts src/modules/shell/components/TitleBar.tsx src/pages/ExistSkinLibrary.tsx src/routes/skins.tsx src/routes/ltk.tsx src/lib/bindings/index.ts src/lib/bindings/exist/ src/lib/bindings/runeforge.ts src/modules/runeforge/ 2>/dev/null || true
+
+      - name: Update Exist version references
+        run: |
+          UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
           UPSTREAM_CLEAN=${UPSTREAM_VERSION#v}
           
+          # Update version in src-tauri/Cargo.toml
+          CURRENT_VERSION=$(grep '^version =' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           if [ "$CURRENT_VERSION" != "$UPSTREAM_CLEAN" ]; then
             sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$UPSTREAM_CLEAN\"/" src-tauri/Cargo.toml
             echo "Updated src-tauri/Cargo.toml version: $CURRENT_VERSION -> $UPSTREAM_CLEAN"
           fi
           
-          # Update version in package.json if it changed
+          # Update version in package.json
           PKG_CURRENT_VERSION=$(grep '"version":' package.json | head -1 | sed 's/.*"\(.*\)".*/\1/')
           if [ "$PKG_CURRENT_VERSION" != "$UPSTREAM_CLEAN" ]; then
             sed -i "s/\"version\": \"$PKG_CURRENT_VERSION\"/\"version\": \"$UPSTREAM_CLEAN\"/" package.json
             echo "Updated package.json version: $PKG_CURRENT_VERSION -> $UPSTREAM_CLEAN"
           fi
 
-      - name: Run Rust validation checks
-        if: ${{ steps.merge.outputs.conflicts != 'true' }}
+      - name: Clean temporary files
         run: |
-          # Run Rust validation checks
+          # Remove any temporary/test files that shouldn't be committed
+          rm -f test_server.* test_catalog_*.json test_catalog_from_server.json
+          rm -f pnpm_test*.txt final_check*.txt test_output.txt final_validation.txt
+          rm -f verify_catalog.* test_server.* download_catalog.*
+          rm -rf .codegraph 2>/dev/null || true
+          find . -name "*.tmp" -delete 2>/dev/null || true
+          find . -name "*.log" -path "*/target/*" -delete 2>/dev/null || true
+
+      - name: Run Rust validation checks
+        run: |
           echo "Running Rust validation checks..."
-          
-          # Check cargo formatting
           cargo fmt --check
-          
-          # Check cargo compiles
           cargo check --workspace
-          
-          # Run tests
           cargo test --workspace
 
       - name: Run frontend validation checks
-        if: ${{ steps.merge.outputs.conflicts != 'true' }}
         run: |
-          # Run frontend validation checks
           echo "Running frontend validation checks..."
-          
-          # Install dependencies
           pnpm install --frozen-lockfile
-          
-          # Type check
           pnpm typecheck
-          
-          # Build
           pnpm build
-          
-          # Lint
           pnpm lint
-          
-          # Test
           pnpm test
 
-      - name: Push sync branch
-        if: ${{ steps.merge.outputs.conflicts != 'true' }}
+      - name: Merge and commit
+        id: merge_and_commit
         run: |
-          UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
-          BRANCH_NAME="upstream-sync/${UPSTREAM_VERSION}"
+          git add -A
+          git commit -m "chore: sync LTK upstream to ${{ needs.check-upstream.outputs.upstream_version }}
           
+          - Synced upstream LTK changes to ${{ needs.check-upstream.outputs.upstream_version }}
+          - Updated version references
+          - Preserved all Exist-specific functionality
+          - All validation checks passed"
+          
+          SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Push sync branch
+        run: |
+          UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
+          BRANCH_NAME="upstream-sync/${UPSTREAM_VERSION}"
           git push origin $BRANCH_NAME --force
 
-      - name: Create or update PR
-        if: ${{ steps.merge.outputs.conflicts != 'true' }}
-        uses: peter-evans/create-pull-request@v6
+  auto-merge-and-release:
+    name: Auto-Merge and Release
+    needs: [check-upstream, sync-and-validate]
+    if: ${{ needs.sync-and-validate.outputs.merge_commit_sha != '' }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout merged branch
+        uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: upstream-sync/${{ steps.get_upstream_version.outputs.version }}
-          base: exist-lol-manager
-          title: "chore: sync LTK upstream to ${{ steps.get_upstream_version.outputs.version }}"
-          body: |
-            ## Upstream Sync
-            
-            **Upstream:** LeagueToolkit/ltk-manager
-            
-            **Previous LTK version:** ${{ steps.get_current_version.outputs.version }}
-            
-            **New LTK version:** ${{ steps.get_upstream_version.outputs.version }}
-            
-            ## Changes
-            - Synced upstream LTK changes to ${{ steps.get_upstream_version.outputs.version }}
-            - Updated version references
-            
-            ## Validation
-            - [ ] cargo fmt --check
-            - [ ] cargo check --workspace
-            - [ ] cargo test --workspace
-            - [ ] pnpm install --frozen-lockfile
-            - [ ] pnpm typecheck
-            - [ ] pnpm build
-            - [ ] pnpm lint
-            - [ ] pnpm test
-            
-            ## Conflicts
-            None (automatic merge successful)
-            
-            ---
-            *This PR was created automatically by the upstream sync workflow.*
+          ref: ${{ needs.sync-and-validate.outputs.sync_branch }}
 
-      - name: Handle merge conflicts
-        if: ${{ steps.merge.outputs.conflicts == 'true' }}
+      - name: Verify merge commit
         run: |
-          echo "Merge conflicts detected - PR creation skipped"
-          echo "Manual resolution required"
-          exit 1
+          echo "Verifying merge commit: ${{ needs.sync-and-validate.outputs.merge_commit_sha }}"
+          git log -1 --oneline
 
-  notify:
-    name: Notify on failure
-    needs: check-upstream
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-msvc
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install pnpm dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows executable
+        run: |
+          pnpm tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PASSWORD }}
+
+      - name: Verify build artifact
+        run: |
+          if [ -f "target/release/ltk-manager.exe" ]; then
+            echo "EXE found at target/release/ltk-manager.exe"
+            EXE_SIZE=$(stat -c%s "target/release/ltk-manager.exe")
+            echo "EXE size: $EXE_SIZE bytes"
+            
+            UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
+            UPSTREAM_CLEAN=${UPSTREAM_VERSION#v}
+            cp target/release/ltk-manager.exe "target/release/Exist-Manager-v${UPSTREAM_CLEAN}.exe"
+            echo "EXE copied to Exist-Manager-v${UPSTREAM_CLEAN}.exe"
+          else
+            echo "ERROR: EXE not found at target/release/ltk-manager.exe"
+            exit 1
+          fi
+
+      - name: Create/Update GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-upstream.outputs.upstream_version }}
+          target_commitish: ${{ needs.sync-and-validate.outputs.merge_commit_sha }}
+          name: Exist Manager
+          body_path: .github/workflows/release_notes.md
+          files: target/release/Exist-Manager-v${{ needs.check-upstream.outputs.upstream_version }}.exe
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify release
+        run: |
+          UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
+          gh release view ${{ needs.check-upstream.outputs.upstream_version }} --repo ${{ env.EXIST_REPO }}
+
+  notify-on-failure:
+    name: Notify on Failure
+    needs: [check-upstream, sync-and-validate, auto-merge-and-release]
     if: failure()
     runs-on: ubuntu-latest
     steps:
@@ -243,7 +371,7 @@ jobs:
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: 'Upstream sync failed: ${{ github.workflow }}',
-              body: `The upstream sync workflow failed. Please check the workflow run for details.\n\nRun: ${github.server_url}/${github.repository}/actions/runs/${github.run_id}`,
-              labels: ['upstream-sync', 'failure']
+              title: 'Upstream auto-release failed: ${{ github.workflow }}',
+              body: `The upstream auto-release workflow failed. Please check the workflow run for details.\n\nRun: ${github.server_url}/${github.repository}/actions/runs/${github.run_id}`,
+              labels: ['upstream-sync', 'failure', 'auto-release']
             })
