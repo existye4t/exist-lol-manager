@@ -284,7 +284,7 @@ jobs:
           pnpm lint
           pnpm test
 
-- name: Merge and commit
+      - name: Merge and commit
         id: merge_and_commit
         run: |
           git add -A
