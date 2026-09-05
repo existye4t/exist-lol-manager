@@ -388,24 +388,17 @@ jobs:
       - name: Create/Update GitHub Release
         run: |
           $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
-          $MERGE_SHA = "${{ needs.sync-and-validate.outputs.merge_commit_sha }}"
           $EXE_PATH = "target/release/Exist-Manager-v$($UPSTREAM_VERSION.TrimStart('v')).exe"
           $REPO = "${{ env.EXIST_REPO }}"
-          
-          # Ensure the tag exists in this repo (push tag if needed)
-          if (-not (git tag -l $UPSTREAM_VERSION)) {
-            Write-Host "Tag $UPSTREAM_VERSION doesn't exist locally, creating and pushing..."
-            git tag $UPSTREAM_VERSION $MERGE_SHA
-            git push origin $UPSTREAM_VERSION
-          }
+          $BRANCH = "upstream-sync/$UPSTREAM_VERSION"
           
           # Check if release already exists
           if (gh release view $UPSTREAM_VERSION --repo $REPO 2>$null) {
             Write-Host "Release $UPSTREAM_VERSION already exists, updating..."
             gh release edit $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md
           } else {
-            Write-Host "Creating new release $UPSTREAM_VERSION..."
-            gh release create $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md --target $MERGE_SHA
+            Write-Host "Creating new release $UPSTREAM_VERSION from branch $BRANCH..."
+            gh release create $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md --target $BRANCH
           }
           
           # Upload the asset
