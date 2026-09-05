@@ -288,14 +288,20 @@ jobs:
         id: merge_and_commit
         run: |
           git add -A
-          git commit -m "chore: sync LTK upstream to ${{ needs.check-upstream.outputs.upstream_version }}
-          
-          - Synced upstream LTK changes to ${{ needs.check-upstream.outputs.upstream_version }}
-          - Updated version references
-          - Preserved all Exist-specific functionality
-          - All validation checks passed"
-          
-          SHA=$(git rev-parse HEAD)
+          # Check if there are any changes to commit (including the merge commit already made)
+          if git diff --cached --quiet; then
+            echo "No changes to commit, using existing merge commit"
+            SHA=$(git rev-parse HEAD)
+          else
+            git commit -m "chore: sync LTK upstream to ${{ needs.check-upstream.outputs.upstream_version }}
+            
+            - Synced upstream LTK changes to ${{ needs.check-upstream.outputs.upstream_version }}
+            - Updated version references
+            - Preserved all Exist-specific functionality
+            - All validation checks passed"
+            
+            SHA=$(git rev-parse HEAD)
+          fi
           echo "sha=$SHA" >> $GITHUB_OUTPUT
 
       - name: Push sync branch
