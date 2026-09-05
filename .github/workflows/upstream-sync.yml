@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force sync even if version matches'
+        description: 'Force sync even if version matches or release exists'
         required: false
         type: boolean
         default: false
@@ -37,6 +37,7 @@ jobs:
       has_update: ${{ steps.compare_versions.outputs.has_update }}
       release_tag: ${{ steps.get_upstream_version.outputs.release_tag }}
       is_stable: ${{ steps.get_upstream_version.outputs.is_stable }}
+      force_sync: ${{ steps.compare_versions.outputs.force_sync }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -83,10 +84,12 @@ jobs:
           CURRENT="${{ steps.get_current_version.outputs.version }}"
           UPSTREAM="${{ steps.get_upstream_version.outputs.version }}"
           IS_STABLE="${{ steps.get_upstream_version.outputs.is_stable }}"
+          FORCE="${{ github.event.inputs.force }}"
           
           if [ "$IS_STABLE" != "true" ]; then
             echo "has_update=false" >> $GITHUB_OUTPUT
             echo "is_stable=false" >> $GITHUB_OUTPUT
+            echo "force_sync=false" >> $GITHUB_OUTPUT
             echo "Upstream version is not a stable release: $UPSTREAM"
             exit 0
           fi
@@ -95,16 +98,23 @@ jobs:
           CURRENT_CLEAN=${CURRENT#v}
           UPSTREAM_CLEAN=${UPSTREAM#v}
           
-          if [ "$CURRENT_CLEAN" = "$UPSTREAM_CLEAN" ]; then
+          # Check if force mode is enabled
+          if [ "$FORCE" = "true" ]; then
+            echo "has_update=true" >> $GITHUB_OUTPUT
+            echo "force_sync=true" >> $GITHUB_OUTPUT
+            echo "Force mode enabled - forcing sync: $CURRENT_CLEAN -> $UPSTREAM_CLEAN"
+          elif [ "$CURRENT_CLEAN" = "$UPSTREAM_CLEAN" ]; then
             echo "has_update=false" >> $GITHUB_OUTPUT
+            echo "force_sync=false" >> $GITHUB_OUTPUT
             echo "Versions match: $CURRENT_CLEAN = $UPSTREAM_CLEAN"
           else
             echo "has_update=true" >> $GITHUB_OUTPUT
+            echo "force_sync=false" >> $GITHUB_OUTPUT
             echo "Update available: $CURRENT_CLEAN -> $UPSTREAM_CLEAN"
           fi
 
-      - name: Exit if no update or not stable
-        if: ${{ steps.compare_versions.outputs.has_update == 'false' || steps.get_upstream_version.outputs.is_stable != 'true' }}
+      - name: Exit if no update and not forcing
+        if: ${{ steps.compare_versions.outputs.has_update == 'false' && github.event.inputs.force != 'true' && steps.get_upstream_version.outputs.is_stable != 'true' }}
         run: |
           if [ "${{ steps.get_upstream_version.outputs.is_stable }}" != "true" ]; then
             echo "Upstream version is not a stable release - skipping"
@@ -115,6 +125,7 @@ jobs:
 
       - name: Check if release already exists
         id: check_existing_release
+        if: ${{ steps.compare_versions.outputs.force_sync != 'true' }}
         run: |
           UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
           # Check if tag already exists locally or remotely
@@ -134,7 +145,7 @@ jobs:
   sync-and-validate:
     name: Sync and Validate
     needs: check-upstream
-    if: ${{ needs.check-upstream.outputs.has_update == 'true' && needs.check-upstream.outputs.is_stable == 'true' && needs.check-upstream.outputs.release_exists == 'false' }}
+    if: ${{ needs.check-upstream.outputs.has_update == 'true' && needs.check-upstream.outputs.is_stable == 'true' && (needs.check-upstream.outputs.release_exists == 'false' || needs.check-upstream.outputs.force_sync == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
