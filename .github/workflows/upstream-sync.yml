@@ -370,19 +370,20 @@ jobs:
 
       - name: Verify build artifact
         run: |
-          if [ -f "target/release/ltk-manager.exe" ]; then
-            echo "EXE found at target/release/ltk-manager.exe"
-            EXE_SIZE=$(stat -c%s "target/release/ltk-manager.exe")
-            echo "EXE size: $EXE_SIZE bytes"
+          if (Test-Path "target/release/ltk-manager.exe") {
+            Write-Host "EXE found at target/release/ltk-manager.exe"
+            $EXE_SIZE = (Get-Item "target/release/ltk-manager.exe").Length
+            Write-Host "EXE size: $EXE_SIZE bytes"
             
-            UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
-            UPSTREAM_CLEAN=${UPSTREAM_VERSION#v}
-            cp target/release/ltk-manager.exe "target/release/Exist-Manager-v${UPSTREAM_CLEAN}.exe"
-            echo "EXE copied to Exist-Manager-v${UPSTREAM_CLEAN}.exe"
-          else
-            echo "ERROR: EXE not found at target/release/ltk-manager.exe"
+            $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
+            $UPSTREAM_CLEAN = $UPSTREAM_VERSION.TrimStart('v')
+            Copy-Item "target/release/ltk-manager.exe" "target/release/Exist-Manager-v$UPSTREAM_CLEAN.exe" -Force
+            Write-Host "EXE copied to Exist-Manager-v$UPSTREAM_CLEAN.exe"
+          } else {
+            Write-Host "ERROR: EXE not found at target/release/ltk-manager.exe"
             exit 1
-          fi
+          }
+        shell: pwsh
 
       - name: Create/Update GitHub Release
         uses: softprops/action-gh-release@v1
