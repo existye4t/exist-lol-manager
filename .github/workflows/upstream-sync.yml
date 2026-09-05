@@ -284,7 +284,7 @@ jobs:
           pnpm lint
           pnpm test
 
-      - name: Merge and commit
+- name: Merge and commit
         id: merge_and_commit
         run: |
           git add -A
@@ -294,8 +294,12 @@ jobs:
             SHA=$(git rev-parse HEAD)
           else
             VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
-            git commit -m "chore: sync LTK upstream to $VERSION - all validation checks passed"
-            SHA=$(git rev-parse HEAD)
+            if git commit -m "chore: sync LTK upstream to $VERSION - validation passed"; then
+              SHA=$(git rev-parse HEAD)
+            else
+              echo "Commit failed, using existing HEAD"
+              SHA=$(git rev-parse HEAD)
+            fi
           fi
           echo "sha=$SHA" >> $GITHUB_OUTPUT
 
