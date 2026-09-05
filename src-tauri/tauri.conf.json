@@ -55,7 +55,7 @@
     "macOS": {
       "minimumSystemVersion": "10.15"
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "deep-link": {
