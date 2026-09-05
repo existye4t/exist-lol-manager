@@ -395,7 +395,6 @@ jobs:
           files: target/release/Exist-Manager-v${{ needs.check-upstream.outputs.upstream_version }}.exe
           draft: false
           prerelease: false
-          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
