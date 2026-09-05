@@ -392,6 +392,13 @@ jobs:
           $EXE_PATH = "target/release/Exist-Manager-v$($UPSTREAM_VERSION.TrimStart('v')).exe"
           $REPO = "${{ env.EXIST_REPO }}"
           
+          # Ensure the tag exists in this repo (push tag if needed)
+          if (-not (git tag -l $UPSTREAM_VERSION)) {
+            Write-Host "Tag $UPSTREAM_VERSION doesn't exist locally, creating and pushing..."
+            git tag $UPSTREAM_VERSION $MERGE_SHA
+            git push origin $UPSTREAM_VERSION
+          }
+          
           # Check if release already exists
           if (gh release view $UPSTREAM_VERSION --repo $REPO 2>$null) {
             Write-Host "Release $UPSTREAM_VERSION already exists, updating..."
