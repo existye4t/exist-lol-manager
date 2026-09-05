@@ -174,7 +174,7 @@ jobs:
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/LeagueToolkit/ltk-manager.git || true
-          git fetch upstream --tags --prune
+          git fetch upstream --tags --prune --force
 
       - name: Create sync branch
         id: create_branch
