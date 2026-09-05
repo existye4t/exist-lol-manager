@@ -62,11 +62,23 @@ jobs:
         run: |
           # Get the latest stable release from upstream (not pre-release, not draft)
           # gh release list returns oldest first, so use [-1] for latest
+          echo "Attempting gh release list..."
           UPSTREAM_RELEASE=$(gh release list --repo LeagueToolkit/ltk-manager --limit 10 --json tagName,isDraft,isPrerelease --jq 'map(select(.isDraft == false and .isPrerelease == false)) | .[-1].tagName // empty' 2>/dev/null || echo "")
+          echo "gh release list result: '$UPSTREAM_RELEASE'"
           
           if [ -z "$UPSTREAM_RELEASE" ]; then
-            # Fallback: get latest stable tag
-            UPSTREAM_RELEASE=$(git ls-remote --tags --sort=-v:refname upstream | grep -E '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | cut -d/ -f3)
+            echo "gh release list returned empty, trying GitHub API via curl..."
+            # Use GitHub API directly (works without auth for public repos)
+            UPSTREAM_RELEASE=$(curl -s "https://api.github.com/repos/LeagueToolkit/ltk-manager/releases" | jq -r 'map(select(.draft == false and .prerelease == false)) | .[0].tag_name // empty' 2>/dev/null || echo "")
+            echo "GitHub API result: '$UPSTREAM_RELEASE'"
+          fi
+          
+          if [ -z "$UPSTREAM_RELEASE" ]; then
+            echo "API failed, trying git ls-remote fallback..."
+            # Fallback: get latest stable tag from upstream remote
+            git fetch upstream --tags --prune 2>/dev/null || true
+            UPSTREAM_RELEASE=$(git ls-remote --tags --sort=-v:refname upstream 2>/dev/null | grep -E '^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | cut -d/ -f3 || echo "")
+            echo "git ls-remote result: '$UPSTREAM_RELEASE'"
           fi
           
           # Determine if it's a stable release (not alpha/beta/rc)
