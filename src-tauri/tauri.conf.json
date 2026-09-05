@@ -45,7 +45,6 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "signCommand": "",
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       },
