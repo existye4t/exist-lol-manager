@@ -217,16 +217,16 @@ jobs:
           UPSTREAM_CLEAN=${UPSTREAM_VERSION#v}
           
           # Update version in src-tauri/Cargo.toml
-          CURRENT_VERSION=$(grep '^version =' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          CURRENT_VERSION=$(grep -E '^\s*version\s*=' src-tauri/Cargo.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           if [ "$CURRENT_VERSION" != "$UPSTREAM_CLEAN" ]; then
-            sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$UPSTREAM_CLEAN\"/" src-tauri/Cargo.toml
+            sed -i -E "s/^(\s*version\s*=\s*\").*(\".*)$/\1$UPSTREAM_CLEAN\2/" src-tauri/Cargo.toml
             echo "Updated src-tauri/Cargo.toml version: $CURRENT_VERSION -> $UPSTREAM_CLEAN"
           fi
           
           # Update version in package.json
-          PKG_CURRENT_VERSION=$(grep '"version":' package.json | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          PKG_CURRENT_VERSION=$(grep -E '"version"\s*:' package.json | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           if [ "$PKG_CURRENT_VERSION" != "$UPSTREAM_CLEAN" ]; then
-            sed -i "s/\"version\": \"$PKG_CURRENT_VERSION\"/\"version\": \"$UPSTREAM_CLEAN\"/" package.json
+            sed -i -E "s/(\"version\"\s*:\s*\").*(\".*)/\1$UPSTREAM_CLEAN\2/" package.json
             echo "Updated package.json version: $PKG_CURRENT_VERSION -> $UPSTREAM_CLEAN"
           fi
 
