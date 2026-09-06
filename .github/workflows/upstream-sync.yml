@@ -99,6 +99,8 @@ jobs:
           IS_STABLE="${{ steps.get_upstream_version.outputs.is_stable }}"
           FORCE="${{ github.event.inputs.force }}"
           
+          echo "FORCE=$FORCE"
+          echo ""
           if [ "$IS_STABLE" != "true" ]; then
             echo "has_update=false" >> $GITHUB_OUTPUT
             echo "is_stable=false" >> $GITHUB_OUTPUT
@@ -126,27 +128,11 @@ jobs:
             echo "Update available: $CURRENT_CLEAN -> $UPSTREAM_CLEAN"
           fi
 
-      - name: Exit if no update and not forcing
-        if: ${{ steps.compare_versions.outputs.has_update == 'false' && github.event.inputs.force != 'true' && steps.get_upstream_version.outputs.is_stable != 'true' }}
-        run: |
-          if [ "${{ steps.get_upstream_version.outputs.is_stable }}" != "true" ]; then
-            echo "Upstream version is not a stable release - skipping"
-          else
-            echo "No upstream update needed"
-          fi
-          exit 0
-
       - name: Check if release already exists
-        id: check_existing_release
-        if: ${{ steps.compare_versions.outputs.force_sync != 'true' }}
+        id: check_release_exists
         run: |
           UPSTREAM_VERSION="${{ steps.get_upstream_version.outputs.version }}"
-          # Check if tag already exists locally or remotely
-          if git rev-parse -q --verify "refs/tags/${UPSTREAM_VERSION}" >/dev/null 2>&1; then
-            echo "tag_exists_locally=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag_exists_locally=false" >> $GITHUB_OUTPUT
-          fi
+          FORCE="${{ steps.compare_versions.outputs.force_sync }}"
           
           # Check if release already exists on GitHub
           if gh release view "${UPSTREAM_VERSION}" --repo ${{ env.EXIST_REPO }} >/dev/null 2>&1; then
@@ -244,15 +230,6 @@ jobs:
             echo "Updated package.json version: $PKG_CURRENT_VERSION -> $UPSTREAM_CLEAN"
           fi
 
-      - name: Regenerate lock files with updated versions
-        run: |
-          echo "Regenerating lock files with updated versions..."
-          # Regenerate Cargo.lock
-          cargo update --workspace
-          # Regenerate pnpm-lock.yaml
-          pnpm install --no-frozen-lockfile
-          echo "Lock files regenerated successfully"
-
       - name: Clean temporary files
         run: |
           # Remove any temporary/test files that shouldn't be committed
@@ -269,13 +246,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-4-dev libglib2.0-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev pkg-config
 
-      - name: Run Rust validation checks
-        run: |
-          echo "Running Rust validation checks..."
-          cargo fmt --check
-          cargo check --workspace
-          cargo test --workspace
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -283,6 +253,22 @@ jobs:
 
       - name: Install pnpm
         run: npm install -g pnpm
+
+      - name: Regenerate lock files with updated versions
+        run: |
+          echo "Regenerating lock files with updated versions..."
+          # Regenerate Cargo.lock
+          cargo update --workspace
+          # Regenerate pnpm-lock.yaml
+          pnpm install --no-frozen-lockfile
+          echo "Lock files regenerated successfully"
+
+      - name: Run Rust validation checks
+        run: |
+          echo "Running Rust validation checks..."
+          cargo fmt --check
+          cargo check --workspace
+          cargo test --workspace
 
       - name: Run frontend validation checks
         run: |
@@ -367,6 +353,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Install system dependencies (Windows)
+        run: |
+          choco install wixtoolset --version 3.14.1 -y --no-progress || true
+          refreshenv
+
       - name: Install pnpm dependencies
         run: pnpm install --frozen-lockfile
 
@@ -439,38 +430,99 @@ jobs:
       - name: Create/Update GitHub Release
         run: |
           $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
-          $EXE_PATH = "target/release/Exist-Manager-v$($UPSTREAM_VERSION.TrimStart('v')).exe"
-          $REPO = "${{ env.EXIST_REPO }}"
+          $UPSTREAM_CLEAN = $UPSTREAM_VERSION.TrimStart('v')
+          $REPO = "existye4t/exist-lol-manager"
           $BRANCH = "upstream-sync/$UPSTREAM_VERSION"
+          $TAG = "v$UPSTREAM_CLEAN"
+          $EXE_PATH = "target/release/Exist-Manager-v$UPSTREAM_CLEAN.exe"
+          $MSI_PATH = "target/release/bundle/msi/Exist Manager_${UPSTREAM_CLEAN}_x64_en-US.msi"
+          $NSIS_PATH = "target/release/bundle/nsis/Exist Manager_${UPSTREAM_CLEAN}_x64-setup.exe"
           
-          # Check if release already exists
-          if (gh release view $UPSTREAM_VERSION --repo $REPO 2>$null) {
-            Write-Host "Release $UPSTREAM_VERSION already exists, updating..."
-            gh release edit $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md
-          } else {
-            Write-Host "Creating new release $UPSTREAM_VERSION from branch $BRANCH..."
-            gh release create $UPSTREAM_VERSION --repo $REPO --title "Exist Manager" --notes-file .github/workflows/release_notes.md --target $BRANCH
+          Write-Host "=== RELEASE CREATION ==="
+          Write-Host "Tag: $TAG"
+          Write-Host "Branch: $BRANCH"
+          Write-Host "Repo: $REPO"
+          
+          # Push tag first
+          git fetch --tags --prune --force
+          git tag -f $TAG
+          git push origin $TAG --force
+          
+          # Read release notes
+          $NOTES_PATH = "docs/releases/$UPSTREAM_CLEAN.md"
+          $NOTES = ""
+          if (Test-Path $NOTES_PATH) {
+            $NOTES = Get-Content $NOTES_PATH -Raw
           }
           
-          # Upload the asset
-          gh release upload $UPSTREAM_VERSION --repo $REPO $EXE_PATH --clobber
-        shell: pwsh
+          # Create or update release using gh cli
+          $RELEASE_ARGS = @(
+            "release", "create", $TAG,
+            "--title", "Exist Manager",
+            "--target", $BRANCH,
+            "--repo", $REPO
+          )
+          
+          if ($NOTES) {
+            $RELEASE_ARGS += "--notes", $NOTES
+          }
+          
+          # Always use latest for now (can be adjusted)
+          $RELEASE_ARGS += "--latest"
+          
+          # Add assets
+          if (Test-Path $EXE_PATH) {
+            $RELEASE_ARGS += $EXE_PATH
+          }
+          if (Test-Path $MSI_PATH) {
+            $RELEASE_ARGS += $MSI_PATH
+          }
+          if (Test-Path $NSIS_PATH) {
+            $RELEASE_ARGS += $NSIS_PATH
+          }
+          
+          Write-Host "Running: gh $RELEASE_ARGS"
+          gh $RELEASE_ARGS
+          
+          Write-Host "Release created/updated successfully"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
 
       - name: Verify release
         run: |
           $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
-          gh release view $UPSTREAM_VERSION --repo ${{ env.EXIST_REPO }}
+          $UPSTREAM_CLEAN = $UPSTREAM_VERSION.TrimStart('v')
+          $TAG = "v$UPSTREAM_CLEAN"
+          
+          Write-Host "=== RELEASE VERIFICATION ==="
+          Write-Host "Checking release $TAG on existye4t/exist-lol-manager"
+          
+          $RELEASE_INFO = gh release view $TAG --repo existye4t/exist-lol-manager --json assets,tagName,title,url
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Release not found!"
+            exit 1
+          }
+          
+          Write-Host "Release found:"
+          Write-Host $RELEASE_INFO
+          
+          $ASSETS = $RELEASE_INFO | ConvertFrom-Json
+          Write-Host "Assets:"
+          $ASSETS.assets | ForEach-Object { Write-Host "  - $($_.name) ($($_.size) bytes)" }
+          
+          Write-Host "=== VERIFICATION COMPLETE ==="
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   notify-on-failure:
     name: Notify on Failure
     needs: [check-upstream, sync-and-validate, auto-merge-and-release]
     if: failure()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      contents: read
     steps:
       - name: Create failure issue
         uses: actions/github-script@v7
@@ -479,7 +531,7 @@ jobs:
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: 'Upstream auto-release failed: ${{ github.workflow }}',
+              title: 'Upstream auto-release failed: Upstream Sync & Auto Release',
               body: `The upstream auto-release workflow failed. Please check the workflow run for details.\n\nRun: ${github.server_url}/${github.repository}/actions/runs/${github.run_id}`,
               labels: ['upstream-sync', 'failure', 'auto-release']
             })
