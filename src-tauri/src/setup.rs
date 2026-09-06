@@ -3,6 +3,7 @@ use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_deep_link::DeepLinkExt;
 
 use crate::commands::launcher::LauncherState;
+use crate::commands::ExistSyncState;
 use crate::deep_link::DeepLinkState;
 use crate::events::TauriEventSink;
 use crate::mods::{
@@ -110,6 +111,7 @@ pub fn run(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(workshop);
     app.manage(hotkey_manager);
     app.manage(deep_link_state);
+    app.manage(ExistSyncState::default());
 
     // Started below the `manage` calls rather than beside the library it
     // maintains: its hashtable sync ends by dropping what the app read out of

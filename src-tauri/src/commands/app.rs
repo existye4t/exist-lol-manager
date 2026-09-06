@@ -22,7 +22,7 @@ pub fn get_app_info() -> IpcResult<AppInfo> {
         .map(|p: std::path::PathBuf| p.to_string_lossy().into_owned());
 
     IpcResult::ok(AppInfo {
-        name: "LTK Manager".to_string(),
+        name: "Exist Manager".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         log_file_path,
         os: std::env::consts::OS.to_string(),
