@@ -412,6 +412,8 @@ jobs:
           $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
           gh release view $UPSTREAM_VERSION --repo ${{ env.EXIST_REPO }}
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   notify-on-failure:
     name: Notify on Failure
