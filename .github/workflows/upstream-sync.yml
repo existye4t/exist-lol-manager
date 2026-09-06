@@ -279,6 +279,11 @@ jobs:
           pnpm lint
           pnpm test
 
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Merge and commit
         id: merge_and_commit
         run: |
