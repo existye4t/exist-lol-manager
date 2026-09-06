@@ -424,6 +424,33 @@ jobs:
           }
         shell: pwsh
 
+      - name: Compute artifact hashes
+        run: |
+          $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
+          $UPSTREAM_CLEAN = $UPSTREAM_VERSION.TrimStart('v')
+          $EXE_PATH = "target/release/Exist-Manager-v$UPSTREAM_CLEAN.exe"
+          $MSI_PATH = "target/release/bundle/msi/Exist Manager_${UPSTREAM_CLEAN}_x64_en-US.msi"
+          $NSIS_PATH = "target/release/bundle/nsis/Exist Manager_${UPSTREAM_CLEAN}_x64-setup.exe"
+          
+          Write-Host "=== ARTIFACT HASHES ==="
+          if (Test-Path $EXE_PATH) {
+            $h = Get-FileHash -Algorithm SHA256 $EXE_PATH
+            Write-Host "EXE SHA256: $($h.Hash)"
+            $env:EXE_SHA256 = $h.Hash
+          }
+          if (Test-Path $MSI_PATH) {
+            $h = Get-FileHash -Algorithm SHA256 $MSI_PATH
+            Write-Host "MSI SHA256: $($h.Hash)"
+            $env:MSI_SHA256 = $h.Hash
+          }
+          if (Test-Path $NSIS_PATH) {
+            $h = Get-FileHash -Algorithm SHA256 $NSIS_PATH
+            Write-Host "NSIS SHA256: $($h.Hash)"
+            $env:NSIS_SHA256 = $h.Hash
+          }
+          Write-Host "=== END ARTIFACT HASHES ==="
+        shell: pwsh
+
       - name: Validate EXE version matches upstream
         run: |
           $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
@@ -441,6 +468,10 @@ jobs:
           $EXE_PRODUCT_VERSION = (Get-Item $EXE_PATH).VersionInfo.ProductVersion
           Write-Host "EXE ProductVersion: $EXE_PRODUCT_VERSION"
           
+          # Get EXE product name
+          $EXE_PRODUCT_NAME = (Get-Item $EXE_PATH).VersionInfo.ProductName
+          Write-Host "EXE ProductName: $EXE_PRODUCT_NAME"
+          
           # Verify version matches
           if ($EXE_VERSION -ne $UPSTREAM_CLEAN -and $EXE_PRODUCT_VERSION -ne $UPSTREAM_CLEAN) {
             Write-Host "ERROR: EXE version mismatch!"
@@ -450,17 +481,47 @@ jobs:
             exit 1
           }
           
+          # Verify product name
+          if ($EXE_PRODUCT_NAME -ne "Exist Manager") {
+            Write-Host "ERROR: EXE product name mismatch!"
+            Write-Host "Expected: Exist Manager"
+            Write-Host "Actual: $EXE_PRODUCT_NAME"
+            exit 1
+          }
+          
           Write-Host "EXE version validation PASSED"
           
-          # Also verify MSI and NSIS installer versions
+          # Also verify MSI installer version
           $MSI_PATH = "target/release/bundle/msi/Exist Manager_${UPSTREAM_CLEAN}_x64_en-US.msi"
-          $NSIS_PATH = "target/release/bundle/nsis/Exist Manager_${UPSTREAM_CLEAN}_x64-setup.exe"
-          
           if (Test-Path $MSI_PATH) {
-            Write-Host "MSI found: $MSI_PATH"
+            $msiObj = New-Object -ComObject WindowsInstaller.Installer
+            $db = $msiObj.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $msiObj, @($MSI_PATH, 0))
+            $view = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db, @('SELECT Value FROM Property WHERE Property = "ProductVersion"'))
+            $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, @())
+            $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, @())
+            $msiVersion = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(1))
+            Write-Host "MSI ProductVersion: $msiVersion"
+            if ($msiVersion -ne $UPSTREAM_CLEAN) {
+              Write-Host "ERROR: MSI version mismatch!"
+              Write-Host "Expected: $UPSTREAM_CLEAN"
+              Write-Host "Actual: $msiVersion"
+              exit 1
+            }
+            Write-Host "MSI version validation PASSED"
           }
+          
+          # Also verify NSIS installer version
+          $NSIS_PATH = "target/release/bundle/nsis/Exist Manager_${UPSTREAM_CLEAN}_x64-setup.exe"
           if (Test-Path $NSIS_PATH) {
-            Write-Host "NSIS found: $NSIS_PATH"
+            $NSIS_VERSION = (Get-Item $NSIS_PATH).VersionInfo.ProductVersion
+            Write-Host "NSIS ProductVersion: $NSIS_VERSION"
+            if ($NSIS_VERSION -ne $UPSTREAM_CLEAN) {
+              Write-Host "ERROR: NSIS version mismatch!"
+              Write-Host "Expected: $UPSTREAM_CLEAN"
+              Write-Host "Actual: $NSIS_VERSION"
+              exit 1
+            }
+            Write-Host "NSIS version validation PASSED"
           }
           
           Write-Host "=== VERSION VALIDATION COMPLETE ==="
