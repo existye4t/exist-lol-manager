@@ -216,18 +216,30 @@ jobs:
           UPSTREAM_VERSION="${{ needs.check-upstream.outputs.upstream_version }}"
           UPSTREAM_CLEAN=${UPSTREAM_VERSION#v}
           
+          # Debug: show current files
+          echo "=== Debug: Checking Cargo.toml ==="
+          grep -n -E '^\s*version\s*=' src-tauri/Cargo.toml | head -5
+          echo "=== Debug: Checking package.json ==="
+          grep -n -E '"version"\s*:' package.json | head -5
+          
           # Update version in src-tauri/Cargo.toml
           CURRENT_VERSION=$(grep -E '^\s*version\s*=' src-tauri/Cargo.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "CURRENT_VERSION='$CURRENT_VERSION', UPSTREAM_CLEAN='$UPSTREAM_CLEAN'"
           if [ "$CURRENT_VERSION" != "$UPSTREAM_CLEAN" ]; then
             sed -i -E "s/^(\s*version\s*=\s*\").*(\".*)$/\1$UPSTREAM_CLEAN\2/" src-tauri/Cargo.toml
             echo "Updated src-tauri/Cargo.toml version: $CURRENT_VERSION -> $UPSTREAM_CLEAN"
+          else
+            echo "Version already matches: $CURRENT_VERSION"
           fi
           
           # Update version in package.json
           PKG_CURRENT_VERSION=$(grep -E '"version"\s*:' package.json | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "PKG_CURRENT_VERSION='$PKG_CURRENT_VERSION', UPSTREAM_CLEAN='$UPSTREAM_CLEAN'"
           if [ "$PKG_CURRENT_VERSION" != "$UPSTREAM_CLEAN" ]; then
             sed -i -E "s/(\"version\"\s*:\s*\").*(\".*)/\1$UPSTREAM_CLEAN\2/" package.json
             echo "Updated package.json version: $PKG_CURRENT_VERSION -> $UPSTREAM_CLEAN"
+          else
+            echo "Package version already matches: $PKG_CURRENT_VERSION"
           fi
 
       - name: Clean temporary files
