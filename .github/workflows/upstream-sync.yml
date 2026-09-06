@@ -345,13 +345,16 @@ jobs:
 
       - name: Verify Cargo.toml version
         run: |
-          echo "=== Verifying Cargo.toml version ==="
-          grep -n -E '^\s*version\s*=' src-tauri/Cargo.toml | head -5
-          CURRENT_VERSION=$(grep -E '^\s*version\s*=' src-tauri/Cargo.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
-          echo "Cargo.toml version: $CURRENT_VERSION"
-          if [ "$CURRENT_VERSION" != "${{ needs.check-upstream.outputs.upstream_version }}" ]; then
-            echo "WARNING: Cargo.toml version ($CURRENT_VERSION) doesn't match upstream (${{ needs.check-upstream.outputs.upstream_version }})"
-          fi
+          Write-Host "=== Verifying Cargo.toml version ==="
+          $lines = Get-Content src-tauri/Cargo.toml | Select-String -Pattern '^\s*version\s*=' | Select-Object -First 5
+          $lines | ForEach-Object { Write-Host $_ }
+          $CURRENT_VERSION = (Get-Content src-tauri/Cargo.toml | Select-String -Pattern '^\s*version\s*=' | Select-Object -First 1).Line -replace '.*"([^"]+)".*', '$1'
+          Write-Host "Cargo.toml version: $CURRENT_VERSION"
+          $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
+          if ($CURRENT_VERSION -ne $UPSTREAM_VERSION) {
+            Write-Host "WARNING: Cargo.toml version ($CURRENT_VERSION) doesn't match upstream ($UPSTREAM_VERSION)"
+          }
+        shell: pwsh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
