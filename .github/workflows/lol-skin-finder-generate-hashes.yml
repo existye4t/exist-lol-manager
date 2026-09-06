@@ -31,83 +31,84 @@ jobs:
       - name: Generate SHA-256 hashes for .fantome files
         id: generate-hashes
         run: |
-          node << 'EOF'
-          import { readdir, readFile, writeFile } from 'node:fs/promises';
-          import { resolve } from 'node:path';
-          import { createHash } from 'node:crypto';
+          cat > generate-hashes.js << 'ENDOFSCRIPT'
+            import { readdir, readFile, writeFile } from 'node:fs/promises';
+            import { resolve } from 'node:path';
+            import { createHash } from 'node:crypto';
 
-          const fantomeDir = 'public/fantome';
-          const skinsPath = 'public/data/skins.json';
-          const fantomeFilesPath = 'public/data/fantome-files.json';
+            const fantomeDir = 'public/fantome';
+            const skinsPath = 'public/data/skins.json';
+            const fantomeFilesPath = 'public/data/fantome-files.json';
 
-          // Read existing skins.json
-          const skinsContent = await readFile(skinsPath, 'utf-8');
-          const skinsData = JSON.parse(skinsContent);
+            // Read existing skins.json
+            const skinsContent = await readFile(skinsPath, 'utf-8');
+            const skinsData = JSON.parse(skinsContent);
 
-          // Read fantome-files.json (list of available IDs)
-          const fantomeFilesContent = await readFile(fantomeFilesPath, 'utf-8');
-          const fantomeFiles = JSON.parse(fantomeFilesContent);
+            // Read fantome-files.json (list of available IDs)
+            const fantomeFilesContent = await readFile(fantomeFilesPath, 'utf-8');
+            const fantomeFiles = JSON.parse(fantomeFilesContent);
 
-          // Create a map of skin ID to skin object for quick lookup
-          const skinMap = new Map();
-          for (const skin of skinsData.skins) {
-            if (skin.has_fantome) {
-              skinMap.set(skin.id, skin);
-            }
-          }
-
-          let updated = 0;
-          let errors = 0;
-
-          // Process each .fantome file
-          for (const filename of fantomeFiles) {
-            const id = filename.replace('.fantome', '');
-            const skin = skinMap.get(id);
-            
-            if (!skin) {
-              console.warn(`Skin ${id} not found in skins.json, skipping`);
-              continue;
-            }
-
-            const filePath = `public/fantome/${id}.fantome`;
-            
-            try {
-              const buffer = await readFile(filePath);
-              const size = buffer.byteLength;
-
-              // Calculate SHA-256
-              const hashBuffer = createHash('sha256').update(buffer).digest();
-              const hashHex = Buffer.from(hashBuffer).toString('hex');
-
-              // Check if update needed
-              const currentHash = skin.fantome_hash;
-              const currentSize = skin.fantome_size;
-
-              if (skin.fantome_hash !== hashHex || skin.fantome_size !== size) {
-                skin.fantome_hash = hashHex;
-                skin.fantome_size = size;
-                updated++;
-                console.log(`Updated ${id}: hash=${hashHex.slice(0, 16)}..., size=${size}`);
+            // Create a map of skin ID to skin object for quick lookup
+            const skinMap = new Map();
+            for (const skin of skinsData.skins) {
+              if (skin.has_fantome) {
+                skinMap.set(skin.id, skin);
               }
-            } catch (e) {
-              console.error(`Error processing ${id}:`, e.message);
             }
-          }
 
-          if (updated > 0) {
-            // Write updated skins.json
-            await writeFile(skinsPath, JSON.stringify({
-              version: skinsData.version,
-              updatedAt: new Date().toISOString(),
-              skins: skinsData.skins
-            }, null, 2));
-            console.log(`Updated ${updated} skin entries in skins.json`);
-          } else {
-            console.log('No updates needed');
-          }
+            let updated = 0;
+            let errors = 0;
 
-          process.exit(0);
-        EOF
+            // Process each .fantome file
+            for (const filename of fantomeFiles) {
+              const id = filename.replace('.fantome', '');
+              const skin = skinMap.get(id);
+              
+              if (!skin) {
+                console.warn(`Skin ${id} not found in skins.json, skipping`);
+                continue;
+              }
+
+              const filePath = `public/fantome/${id}.fantome`;
+              
+              try {
+                const buffer = await readFile(filePath);
+                const size = buffer.byteLength;
+
+                // Calculate SHA-256
+                const hashBuffer = createHash('sha256').update(buffer).digest();
+                const hashHex = Buffer.from(hashBuffer).toString('hex');
+
+                // Check if update needed
+                const currentHash = skin.fantome_hash;
+                const currentSize = skin.fantome_size;
+
+                if (skin.fantome_hash !== hashHex || skin.fantome_size !== size) {
+                  skin.fantome_hash = hashHex;
+                  skin.fantome_size = size;
+                  updated++;
+                  console.log(`Updated ${id}: hash=${hashHex.slice(0, 16)}..., size=${size}`);
+                }
+              } catch (e) {
+                console.error(`Error processing ${id}:`, e.message);
+              }
+            }
+
+            if (updated > 0) {
+              // Write updated skins.json
+              await writeFile(skinsPath, JSON.stringify({
+                version: skinsData.version,
+                updatedAt: new Date().toISOString(),
+                skins: skinsData.skins
+              }, null, 2));
+              console.log(`Updated ${updated} skin entries in skins.json`);
+            } else {
+              console.log('No updates needed');
+            }
+
+            process.exit(0);
+          ENDOFSCRIPT
+          node generate-hashes.js
 
       - name: Commit and push changes
         if: ${{ steps.generate-hashes.outcome == 'success' }}
