@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "LTK Manager",
+        "title": "Exist Manager",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: data: http://asset.localhost ltk-asset: http://ltk-asset.localhost",
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: data: https: http://asset.localhost ltk-asset: http://ltk-asset.localhost",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
@@ -61,15 +61,6 @@
     "deep-link": {
       "desktop": {
         "schemes": ["ltk"]
-      }
-    },
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwQjBFRkU5MDdENUVENTIKUldSUzdkVUg2ZSt3b0pldjRGZUQ3WkgwcjU0M2d5N1pnRGlhR0NPODkyMWpyaTEvUFQvWWlpcVkK",
-      "endpoints": [
-        "https://github.com/LeagueToolkit/ltk-manager/releases/download/updater/latest.json"
-      ],
-      "windows": {
-        "installMode": "passive"
       }
     }
   }

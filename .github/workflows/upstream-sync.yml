@@ -244,6 +244,15 @@ jobs:
             echo "Updated package.json version: $PKG_CURRENT_VERSION -> $UPSTREAM_CLEAN"
           fi
 
+      - name: Regenerate lock files with updated versions
+        run: |
+          echo "Regenerating lock files with updated versions..."
+          # Regenerate Cargo.lock
+          cargo update --workspace
+          # Regenerate pnpm-lock.yaml
+          pnpm install --no-frozen-lockfile
+          echo "Lock files regenerated successfully"
+
       - name: Clean temporary files
         run: |
           # Remove any temporary/test files that shouldn't be committed
@@ -383,6 +392,48 @@ jobs:
             Write-Host "ERROR: EXE not found at target/release/ltk-manager.exe"
             exit 1
           }
+        shell: pwsh
+
+      - name: Validate EXE version matches upstream
+        run: |
+          $UPSTREAM_VERSION = "${{ needs.check-upstream.outputs.upstream_version }}"
+          $UPSTREAM_CLEAN = $UPSTREAM_VERSION.TrimStart('v')
+          $EXE_PATH = "target/release/Exist-Manager-v$UPSTREAM_CLEAN.exe"
+          
+          Write-Host "=== VERSION VALIDATION ==="
+          Write-Host "Expected version: $UPSTREAM_CLEAN"
+          
+          # Get EXE file version metadata
+          $EXE_VERSION = (Get-Item $EXE_PATH).VersionInfo.FileVersion
+          Write-Host "EXE FileVersion: $EXE_VERSION"
+          
+          # Get EXE product version
+          $EXE_PRODUCT_VERSION = (Get-Item $EXE_PATH).VersionInfo.ProductVersion
+          Write-Host "EXE ProductVersion: $EXE_PRODUCT_VERSION"
+          
+          # Verify version matches
+          if ($EXE_VERSION -ne $UPSTREAM_CLEAN -and $EXE_PRODUCT_VERSION -ne $UPSTREAM_CLEAN) {
+            Write-Host "ERROR: EXE version mismatch!"
+            Write-Host "Expected: $UPSTREAM_CLEAN"
+            Write-Host "FileVersion: $EXE_VERSION"
+            Write-Host "ProductVersion: $EXE_PRODUCT_VERSION"
+            exit 1
+          }
+          
+          Write-Host "EXE version validation PASSED"
+          
+          # Also verify MSI and NSIS installer versions
+          $MSI_PATH = "target/release/bundle/msi/Exist Manager_${UPSTREAM_CLEAN}_x64_en-US.msi"
+          $NSIS_PATH = "target/release/bundle/nsis/Exist Manager_${UPSTREAM_CLEAN}_x64-setup.exe"
+          
+          if (Test-Path $MSI_PATH) {
+            Write-Host "MSI found: $MSI_PATH"
+          }
+          if (Test-Path $NSIS_PATH) {
+            Write-Host "NSIS found: $NSIS_PATH"
+          }
+          
+          Write-Host "=== VERSION VALIDATION COMPLETE ==="
         shell: pwsh
 
       - name: Create/Update GitHub Release
