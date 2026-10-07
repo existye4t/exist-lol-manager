@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 
+mod commands;
 mod deep_link;
 mod error;
 mod events;
@@ -86,7 +87,39 @@ fn main() {
         .plugin(services::integrations::plugin())
         .plugin(services::links::plugin())
         .plugin(services::news::plugin())
-        .plugin(services::workshop::plugin());
+        .plugin(services::workshop::plugin())
+        .invoke_handler(tauri::generate_handler![
+            // Exist Skins
+            commands::get_exist_catalog,
+            commands::download_exist_skin,
+            commands::enqueue_exist_download,
+            commands::get_exist_download_queue,
+            commands::pause_exist_download,
+            commands::resume_exist_download,
+            commands::cancel_exist_download,
+            commands::retry_exist_download,
+            commands::remove_exist_download,
+            commands::get_installed_exist_skins,
+            commands::apply_exist_skin,
+            commands::unapply_exist_skin,
+            commands::delete_exist_skin,
+            commands::check_exist_skin_update,
+            commands::update_exist_skin,
+            commands::get_exist_skins_update_status,
+            // RuneForge
+            commands::get_runeforge_catalog,
+            commands::get_runeforge_champions,
+            commands::get_runeforge_thumbnail,
+            commands::get_runeforge_download_url,
+            commands::install_runeforge_mod,
+            commands::get_installed_runeforge_ids,
+            commands::get_runeforge_installed_records,
+            // Exist Sync & Update
+            commands::get_exist_sync_status,
+            commands::check_exist_upstream_sync,
+            commands::check_exist_app_update,
+            commands::start_exist_app_update,
+        ]);
 
     builder
         /* The preview's pixels come this way rather than over IPC, so an

@@ -1,7 +1,7 @@
 import {
   GearIcon,
-  HouseIcon,
   MinusIcon,
+  SparkleIcon,
   SquareIcon,
   StethoscopeIcon,
   XIcon,
@@ -37,7 +37,7 @@ import { type TitleBarFold, titleBarFold } from "./titleBarFold";
 import { UpdateButton } from "./UpdateButton";
 
 const navItems = [
-  { to: "/", label: m.home_nav_label(), icon: HouseIcon, exact: true },
+  { to: "/skins", label: "Skins", icon: SparkleIcon, exact: false },
   { to: "/mods", label: m.library_nav_label(), icon: CollectionIcon, exact: false },
   { to: "/workshop", label: m.workshop_nav_label(), icon: LootIcon, exact: false },
 ] as const;
@@ -172,7 +172,7 @@ interface TitleBarProps {
   appInfo?: AppInfo;
 }
 
-export function TitleBar({ title = "LTK Manager", appInfo }: TitleBarProps) {
+export function TitleBar({ title = "Exist Skin Manager", appInfo }: TitleBarProps) {
   const { data: platform } = usePlatformSupport();
   const isMacOS = platform?.os === "macos";
   const latest = useLatestIncident();
@@ -259,7 +259,7 @@ export function TitleBar({ title = "LTK Manager", appInfo }: TitleBarProps) {
             <NavLink
               key={item.to}
               {...item}
-              dot={item.to === "/" && homeUnread}
+              dot={item.to === "/skins" && homeUnread}
               folded={fold !== "full"}
             />
           ))}

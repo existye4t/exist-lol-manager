@@ -1,50 +1,17 @@
-# AGENTS.md
+# CLAUDE.md
 
-This file provides guidance to coding agents working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 This file is the primary guidance document for the ltk-manager codebase.
 
-Guidance is scoped by directory:
+Guidance is scoped so backend work does not carry the frontend's:
 
-- `src-tauri/AGENTS.md` - workspace crates, the patcher and the Tauri states. Loads under
-  `src-tauri/`, and the `AGENTS.md` of each `crates/ltk-manager-*` crate points to it.
-- `src/AGENTS.md` - React/TypeScript conventions, loads when working under `src/`.
-- `src/styles/AGENTS.md` - how to author the design tokens, loads only in that directory.
+- `src-tauri/CLAUDE.md` - workspace crates, the patcher and the Tauri states. Loads under
+  `src-tauri/`, and `crates/ltk-manager-core/` imports it.
+- `src/CLAUDE.md` - React/TypeScript conventions, loads when working under `src/`.
+- `src/styles/CLAUDE.md` - how to author the design tokens, loads only in that directory.
 - The `design-system` skill - which token to reach for in a component. Loaded on demand, so it
-  is not needed for backend work.
-
-## Writing
-
-Use direct, literal language in replies, documentation, comments, UI copy, issues and PRs.
-Mannered prose uses metaphor, decorative phrasing or rhetorical contrast where a direct statement
-would explain the same thing. Remove it before sending a reply or saving prose.
-
-Name the action, fact or condition. Use familiar words and short paragraphs. Keep technical terms
-when they are precise. Delete phrases that add emphasis without information. For example, write
-"adjust the setting" instead of "turn the dial", and "remains relevant" instead of "earns its keep".
-
-## Task execution
-
-- Complete requested changes and required checks before ending the turn. An assessment request ends
-  with findings. Continue authorized, reversible work without another approval.
-- Resolve routine ambiguity from repository conventions. Ask when the answer changes the scope
-  or safety of the work, and finish independent work while waiting.
-- Batch independent reads and searches. Sequence dependent calls and mutations. Prefer targeted
-  patches, and report unrelated findings separately.
-- Keep tests proportional to changed behavior and local conventions. Run required checks, then
-  repeat only when edits, failures or unresolved concerns justify it.
-- Give brief progress updates. Close with the outcome, verification and remaining blockers in
-  plain language.
-- In handoffs or compaction summaries, retain the request, constraints, decisions, rejected
-  approaches, changed files, check results and next unfinished step. Preserve exact identifiers
-  needed to resume.
-
-Load scoped guidance before editing its files. Read referenced material when its task applies,
-and reuse current findings already in context. Repository rules remain authoritative for local
-checks and commit permissions.
-
-When changing agent instructions or evaluating agent efficiency, read
-[Agent evaluation](docs/agents/agent-evaluation.md).
+  costs nothing while you are in `src-tauri/`.
 
 ## Commands
 
@@ -65,13 +32,6 @@ embedded snapshot already matches.
 
 ## Code Style
 
-**Separate logical steps with blank lines.** In every language, group statements that serve
-one purpose and leave a blank line when the context changes: setup, validation, loading,
-transformation, side effects, or the final result. Keep a guard beside the value it checks.
-Separate function declarations, and give nested loops and branches the same logical spacing.
-Expand compound control flow into braced blocks. Apply this to new and changed code, and
-review the grouping after formatting, since a formatter cannot identify context boundaries.
-
 Avoid trivially descriptive comments. Only comment non-obvious business logic, workarounds, edge cases, or a decision the code cannot show. Document all public Rust APIs with `///` doc comments.
 
 **A comment explains the code, not the product.** The test is whether deleting it would let a
@@ -89,13 +49,6 @@ prose is what is wrong.
 
 **No redundant comments.** Do not add inline comments that restate what the code already expresses. If the code is descriptive enough (clear variable names, well-known patterns like temp-file-then-rename, obvious API calls), leave it uncommented. This applies to AI-generated code and suggestions too - strip narration comments before committing. The same goes for what a symbol's own doc expresses: a call site that restates the constant or type it is using is writing that doc twice. Needing the explanation there usually means the code is in the wrong place - move it beside what it explains, and the comment stops being needed.
 
-Use clear names, small components and functions, and named constants to make the code understandable without explanatory comments.
-
-- **One rich doc per unit** - document the exported component, hook or function with a single structured doc comment: what it is, its parts, non-obvious behaviour, accessibility, gotchas. Reference, not a story.
-- **Inline comments are the exception** - only for what the code cannot say: a hidden constraint, a workaround and its cause, a magic value. One or two lines.
-- **Never** narrate history ("used to", "the old X"), argue design or product decisions at length, retell the change, or restate the code. That belongs in the commit or PR.
-- If comments outweigh the code around them, cut them.
-
 **Cite a rule, do not restate it.** Code written to satisfy a documented design rule
 names that rule by its code and stops - `/* Duotone rather than fill: DS-ICON-WEIGHT. */`,
 not a paragraph reproducing the reasoning. `DS-*` codes are defined in the `design-system`
@@ -104,8 +57,8 @@ skill. Add a code there before citing a new one.
 The same holds for a `docs/ux/` spec: name the section and the file and stop - a comment reading
 `per "What an empty box lists" in docs/ux/WORKSHOP.md` and nothing more. A citation sits at a file
 header or a module's exported entry point, never on a statement, and only where prose was removed.
-It identifies the source of the removed prose. Use a repository-root path so moving the code
-does not change the reference.
+It is the receipt for what is no longer written there. Never a relative path, because the code
+moves and the doc does not.
 
 **A doc's first line names the thing, it does not narrate it.** One line, a noun phrase or a single
 declarative sentence, saying what the symbol _is_ - the same shape a commit subject takes, on the
@@ -141,21 +94,8 @@ sentence ends with a full stop, like any other sentence.
 
 ## Commits and PRs
 
-One conventional-commit subject line. No body, no trailers, no `Co-Authored-By`. A PR takes that
-same subject as its title. Never commit or push unasked.
-
-**A PR body declares what the change is.** Terse statements of what the code does, grouped by
-area, as a list. No prose paragraphs, no account of how the work went, and no wording bound to a
-moment (`now`, `previously`, `no longer`, `new`) unless a reader has to act on the transition, as
-with a migration or a breaking change.
-
-```
-Bad   Previously a save could race, so this PR now writes through a temp file instead.
-Good  A collider save writes through a temporary file of its own.
-
-Bad   I reworked the Physics pane after the split layout turned out not to work.
-Good  The Physics pane shows the list or the picked item's fields, never both.
-```
+One conventional-commit subject line. No body, no trailers, no `Co-Authored-By`. A PR is that same
+subject as its title and an empty body. Never commit or push unasked.
 
 **A subject names the change, it does not describe it.** A plain verb and a domain noun phrase,
 roughly three to six words, in the codebase's own vocabulary. No contrastive clause, no mechanism,
@@ -175,7 +115,7 @@ Good  fix(mods): key game content cache on build
 ### The same shape everywhere, on different vocabulary
 
 A title is a terse noun phrase wherever one is written, and what changes between them is only which
-words the reader knows.
+words are common ground with the reader. Terseness is not a concession to `git log`.
 
 | What                | Common ground with the reader                |
 | ------------------- | -------------------------------------------- |
@@ -224,13 +164,11 @@ Single-context, with one `CONTEXT.md` and one `docs/adr/` at the repo root. See
 In a checkout indexed by CodeGraph (`.codegraph/` at the repo root), the index reads the code but
 has blind spots:
 
-- The Tauri command boundary has no edge. `api.fooBar` in `src/lib/tauri.ts` calls
-  `commands.fooBar` in `src/lib/bindings.ts` or a service's `src/lib/ipc/<service>.ts`, which
-  invokes the string `"foo_bar"` or `"plugin:<service>|foo_bar"`, the Rust command of that name
-  in `src-tauri/src/ipc.rs` or `src-tauri/src/services/table.rs`. An explore query that names both
-  sides (`fooBar foo_bar`) returns the whole flow.
+- The Tauri command boundary has no edge. `api.fooBar` in `src/lib/tauri.ts` invokes the string
+  `"foo_bar"`, which is the Rust command of that name registered in `src-tauri/src/main.rs`. An
+  explore query that names both sides (`fooBar foo_bar`) returns the whole flow.
 - A cross-language `calls` or `imports` edge is a name collision (Rust `.unwrap()` resolves to
-  `src/utils/result.ts`), unless the target is a generated binding type. Qualified Rust names such as
+  `src/utils/result.ts`), unless the target is a ts-rs binding type. Qualified Rust names such as
   `GameDir::resolve` keep callers exact.
 - `codegraph affected` sees no Rust tests, because they are inline `#[cfg(test)]` modules. Rust
   test impact is `cargo test`, scoped with `-p` to the crate touched.

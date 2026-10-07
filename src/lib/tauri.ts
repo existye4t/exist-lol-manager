@@ -1,3 +1,4 @@
+import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 import type {
   AssetRef,
   BinDocumentId,
@@ -7,6 +8,7 @@ import type {
   ImportFantomeArgs,
   ImportGitRepoArgs,
   LaunchTarget,
+  InstallOutcome_Serialize as InstallOutcome,
   MaterialSource,
   ParticleDefine,
   ParticleShader,
@@ -35,7 +37,7 @@ import { commands as patcher } from "@/lib/ipc/patcher";
 import { commands as preview } from "@/lib/ipc/preview";
 import { commands as settings } from "@/lib/ipc/settings";
 import { commands as workshop } from "@/lib/ipc/workshop";
-import { map as mapResult } from "@/utils/result";
+import { map as mapResult, type Result } from "@/utils/result";
 
 export type * from "@/lib/bindings";
 /* A serde `default` or `skip_serializing_if` splits a type by phase, and a command answers
@@ -75,6 +77,173 @@ export type { Result } from "@/utils/result";
 export type SaveProjectConfigArgs = ProjectMetadata & { projectPath: string };
 export { isErr, isOk, match, unwrap, unwrapOr } from "@/utils/result";
 
+export type ExistSkin = {
+  id: string;
+  skinNum: number;
+  name: string;
+  champion: string;
+  nameEn: string;
+  championEn: string;
+  championId: string;
+  image: string;
+  imageFallback: string;
+  parentSkinId: string | null;
+  hasFantome: boolean;
+};
+
+export type ExistCatalog = {
+  version: string;
+  updatedAt: string;
+  skins: ExistSkin[];
+  fromCache: boolean;
+};
+
+export type ExistDownloadTask = {
+  skinId: string;
+  state: string;
+  downloadedBytes: number | bigint;
+  totalBytes: number | bigint | null;
+  bytesPerSecond: number | bigint;
+  etaSeconds: number | bigint | null;
+  error: string | null;
+};
+
+export type ExistInstall = {
+  skinId: string;
+  modId: string;
+  cachedPath: string;
+};
+
+export type InstalledExistSkin = {
+  skinId: string;
+  modId: string;
+  cachedPath: string;
+  fileSize: number | bigint;
+  downloadedAt: string;
+  applied: boolean;
+};
+
+export type ExistSkinUpdateInfo = {
+  skinId: string;
+  localHash: string;
+  remoteHash: string | null;
+  remoteSize: number | bigint | null;
+  updateAvailable: boolean;
+  localSize: number | bigint;
+  lastChecked: string | null;
+};
+
+export type ExistSkinCatalogStatus = {
+  version: string;
+  updatedAt: string;
+  fromCache: boolean;
+};
+
+export type ExistSyncStatus = {
+  currentLtkVersion: string;
+  latestLtkVersion: string | null;
+  latestReleaseDate: string | null;
+  hasNewLtkRelease: boolean;
+  isCompatible: boolean;
+  hasConflictingFiles: boolean;
+  conflictingFiles: string[];
+  safeToAutoUpdate: boolean;
+  lastCheckedAt: string | null;
+  lastSuccessfulCheckAt: string | null;
+  checkCount: number;
+  lastError: string | null;
+};
+
+export type ExistAppUpdateInfo = {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseNotes: string;
+  downloadUrl: string;
+  releaseDate: string;
+};
+
+export type RuneforgeChampion = {
+  id: number;
+  name: string;
+};
+
+export type RuneforgeChampions = {
+  champions: RuneforgeChampion[];
+};
+
+export type RuneforgePublisher = {
+  id: string;
+  username: string;
+};
+
+export type RuneforgeMod = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  publisher: RuneforgePublisher | null;
+  description: string;
+  thumbnailKey: string | null;
+  category: string | null;
+  viewCount: number | bigint;
+  downloadCount: number | bigint;
+  likeCount: number | bigint;
+  champions: RuneforgeChampion[];
+  themes: string[];
+  features: string[];
+  status: string | null;
+  isGilded: boolean;
+  publishedAt: string | null;
+  isTrending: boolean;
+};
+
+export type RuneforgeCatalog = {
+  mods: RuneforgeMod[];
+  total: number;
+};
+
+export type RuneforgeCatalogQuery = {
+  page: number;
+  pageSize: number;
+  search: string | null;
+  championId: number | null;
+  category: string | null;
+  theme: string | null;
+  feature: string | null;
+};
+
+async function invokeResult<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<Result<T, { message: string }>> {
+  try {
+    const res = await __TAURI_INVOKE<any>(cmd, args);
+    if (res && typeof res === "object" && "ok" in res) {
+      if (res.ok) {
+        return { ok: true, value: res.value as T };
+      }
+      const message =
+        typeof res.error === "string"
+          ? res.error
+          : res.error?.detail ?? res.error?.message ?? res.error?.code ?? JSON.stringify(res.error);
+      return { ok: false, error: { message } };
+    }
+    return { ok: true, value: res as T };
+  } catch (error: any) {
+    const message = typeof error === "string" ? error : error?.message ?? String(error);
+    return { ok: false, error: { message } };
+  }
+}
+
+export interface RuneforgeInstalledRecord {
+  modId: string;
+  installedId: string;
+  name: string;
+  thumbnailKey?: string | null;
+  downloadedAt: string;
+}
+
 // API functions
 export const api = {
   integrations: {
@@ -91,6 +260,51 @@ export const api = {
   listReleases: news.listReleases,
   listAnnouncements: news.listAnnouncements,
   listNotices: news.listNotices,
+
+  // Exist Skin Library
+  getExistCatalog: () => invokeResult<ExistCatalog>("get_exist_catalog"),
+  enqueueExistDownload: (skinId: string) =>
+    invokeResult<void>("enqueue_exist_download", { skinId }),
+  getExistDownloadQueue: () => invokeResult<ExistDownloadTask[]>("get_exist_download_queue"),
+  pauseExistDownload: (skinId: string) => invokeResult<void>("pause_exist_download", { skinId }),
+  resumeExistDownload: (skinId: string) => invokeResult<void>("resume_exist_download", { skinId }),
+  cancelExistDownload: (skinId: string) => invokeResult<void>("cancel_exist_download", { skinId }),
+  retryExistDownload: (skinId: string) => invokeResult<void>("retry_exist_download", { skinId }),
+  removeExistDownload: (skinId: string) => invokeResult<void>("remove_exist_download", { skinId }),
+  getInstalledExistSkins: () => invokeResult<InstalledExistSkin[]>("get_installed_exist_skins"),
+  applyExistSkin: (skinId: string) => invokeResult<void>("apply_exist_skin", { skinId }),
+  unapplyExistSkin: (skinId: string) => invokeResult<void>("unapply_exist_skin", { skinId }),
+  deleteExistSkin: (skinId: string) => invokeResult<void>("delete_exist_skin", { skinId }),
+  updateExistSkin: (skinId: string) =>
+    invokeResult<ExistInstall>("update_exist_skin", { skinId }),
+  checkExistSkinUpdate: (skinId: string) =>
+    invokeResult<ExistSkinUpdateInfo | null>("check_exist_skin_update", { skinId }),
+  getExistSkinsUpdateStatus: () =>
+    invokeResult<ExistSkinUpdateInfo[]>("get_exist_skins_update_status"),
+  syncExistSkinCatalog: () => invokeResult<ExistSkinCatalogStatus>("sync_exist_skin_catalog"),
+  getExistCatalogStatus: () => invokeResult<ExistSkinCatalogStatus>("get_exist_catalog_status"),
+
+  // RuneForge
+  getRuneforgeCatalog: (query: RuneforgeCatalogQuery) =>
+    invokeResult<RuneforgeCatalog>("get_runeforge_catalog", { query }),
+  getRuneforgeChampions: () => invokeResult<RuneforgeChampions>("get_runeforge_champions"),
+  getRuneforgeThumbnail: (thumbnailKey: string) =>
+    invokeResult<string | null>("get_runeforge_thumbnail", { thumbnailKey }),
+  getRuneforgeDownloadUrl: (modId: string) =>
+    invokeResult<string>("get_runeforge_download_url", { modId }),
+  installRuneforgeMod: (modId: string, thumbnailKey?: string | null) =>
+    invokeResult<InstallOutcome>("install_runeforge_mod", { modId, thumbnailKey }),
+  getInstalledRuneforgeIds: () =>
+    invokeResult<string[]>("get_installed_runeforge_ids"),
+  getRuneforgeInstalledRecords: () =>
+    invokeResult<RuneforgeInstalledRecord[]>("get_runeforge_installed_records"),
+
+  // Exist Sync & Update
+  getExistSyncStatus: () => invokeResult<ExistSyncStatus>("get_exist_sync_status"),
+  triggerUpstreamLtkCheck: () => invokeResult<ExistSyncStatus>("trigger_upstream_ltk_check"),
+  checkExistAppUpdate: () => invokeResult<ExistAppUpdateInfo>("check_exist_app_update"),
+  downloadAndInstallExistAppUpdate: (downloadUrl: string) =>
+    invokeResult<void>("download_and_install_exist_app_update", { downloadUrl }),
 
   // Settings
   getSettings: settings.getSettings,

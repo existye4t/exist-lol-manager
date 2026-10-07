@@ -104,11 +104,12 @@ pub struct Config {
     /// Enabling a mod moves it to the front of its folder. Off by default.
     #[serde(default)]
     pub promote_enabled_mods: bool,
-    /// Whether to enforce the anti-skinhack scan while patching. When on
-    /// (default), a champion WAD that fails the scan aborts patching. When off,
+    /// Whether to enforce the anti-skinhack scan while patching. In Exist LoL
+    /// Manager, this defaults to false so custom skins and champion WADs load
+    /// without being rejected by anti-skinhack scan enforcement. When off,
     /// the `CSLOL_HOOK_OPT_OUT_AH_V1` hook flag is set so failures are
-    /// downgraded to warnings and flagged mods load anyway. Default: true.
-    #[serde(default = "default_true")]
+    /// downgraded to warnings. User changes in settings are preserved.
+    #[serde(default)]
     pub enforce_skinhack_scan: bool,
     /// Whether mods' string overrides are applied to every installed locale
     /// instead of only the locale the League client is configured to use.
@@ -241,7 +242,7 @@ impl Default for Config {
             elevate_injector: false,
             auto_categorization_enabled: true,
             promote_enabled_mods: false,
-            enforce_skinhack_scan: true,
+            enforce_skinhack_scan: false,
             apply_string_overrides_to_all_locales: false,
             verbose_patcher_logging: false,
             full_wad_scan: false,
@@ -271,7 +272,7 @@ mod tests {
         assert!(!config.elevate_injector);
         assert!(config.auto_categorization_enabled);
         assert!(!config.promote_enabled_mods);
-        assert!(config.enforce_skinhack_scan);
+        assert!(!config.enforce_skinhack_scan);
         assert!(!config.apply_string_overrides_to_all_locales);
         assert!(!config.verbose_patcher_logging);
         assert!(!config.full_wad_scan);
@@ -331,7 +332,7 @@ mod tests {
         let config: Config = serde_json::from_str("{}").unwrap();
         assert!(config.league_path.is_none());
         assert!(config.block_scripts_wad);
-        assert!(config.enforce_skinhack_scan);
+        assert!(!config.enforce_skinhack_scan);
     }
 
     /// Settings files written before this flag existed have to come back on,
@@ -443,5 +444,22 @@ mod tests {
         assert_eq!(json[0]["value"], "foo.wad.client");
         assert_eq!(json[1]["kind"], "regex");
         assert_eq!(json[1]["value"], "bar");
+    }
+
+    #[test]
+    fn enforce_skinhack_scan_defaults_to_false_and_preserves_user_override() {
+        // Fresh install / omitted from json => false
+        let config_default: Config = serde_json::from_str("{}").unwrap();
+        assert!(!config_default.enforce_skinhack_scan);
+
+        // User explicitly set to true => true preserved
+        let config_custom_true: Config =
+            serde_json::from_str(r#"{"enforceSkinhackScan": true}"#).unwrap();
+        assert!(config_custom_true.enforce_skinhack_scan);
+
+        // User explicitly set to false => false preserved
+        let config_custom_false: Config =
+            serde_json::from_str(r#"{"enforceSkinhackScan": false}"#).unwrap();
+        assert!(!config_custom_false.enforce_skinhack_scan);
     }
 }

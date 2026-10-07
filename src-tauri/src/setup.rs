@@ -163,6 +163,8 @@ pub fn run(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(hotkey_manager);
     app.manage(deep_link_state);
     app.manage(crate::deep_link::files::OpenedFilesState::default());
+    app.manage(crate::commands::ExistSyncState::default());
+    crate::commands::start_background_sync(app_handle.clone());
 
     // Started below the `manage` calls rather than beside the library it
     // maintains: its hashtable sync ends by dropping what the app read out of

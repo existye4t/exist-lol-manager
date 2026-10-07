@@ -411,3 +411,27 @@ still. Not a **carrier**, which places a particle system's origin.
 
 **Live simulation** - the pose modifiers stepped each frame under a unit the reader moves with
 the Move gizmo, which the pose reads in place of the baked pass while the gizmo is on.
+
+## Exist extensions
+
+**Exist catalog** — the curated remote registry of champion community skins, providing
+deterministic archive URLs and SHA-256 checksums. Cached locally for offline access.
+_Avoid_: skin database, remote store
+
+**Exist skin** — an individual skin definition from the Exist catalog, referenced by `skin_id` and
+belonging to a specific champion. Distinct from a generic mod.
+
+**Installed Exist skin** — a record in `<storage>/installed_skins.json` binding an `ExistSkin` to an
+installed LTK mod entry UUID, storing download timestamp, file size and applied status.
+
+**RuneForge record** — an entry in `<storage>/runeforge/installed_mods.json` tracking a downloaded
+RuneForge mod, preserving its upstream `mod_id`, local installed mod UUID, and `thumbnail_key`.
+
+**Installed cache** — the unified frontend view aggregating downloaded Exist catalog skins and
+RuneForge packages. Kept separate from the **Custom skins** workspace, which handles raw imported
+user archives.
+_Avoid_: downloaded tab
+
+**Selection sync** — the state invariant where deleting or uninstalling an enabled mod immediately
+removes it from the active profile's `enabled_mods` and drops the patcher selection count.
+
