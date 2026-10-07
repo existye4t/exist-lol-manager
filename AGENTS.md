@@ -243,9 +243,10 @@ Exist LoL Manager extends LTK 1.27.0 with custom catalog and community features:
 - **Backend Commands (`src-tauri/src/commands/`):**
   - `exist_skins.rs`: Curated skin catalog fetching, download queueing, and `installed_skins.json` mapping.
   - `runeforge.rs`: RuneForge catalog query proxy, archive downloading, and thumbnail cache persistence in `runeforge/installed_mods.json`.
-  - `updater.rs`: Upstream LTK 1.27.0+ release detection and automated update coordination.
+  - `exist_sync.rs`: Upstream LTK release detection, safe diff evaluation, and Exist in-app updater coordination.
 - **Frontend Pages & Modules:**
   - `src/pages/ExistSkinLibrary.tsx`: Unified skin library, champion view, RuneForge browser, and Installed Cache filtering.
+  - `src/routes/skins.tsx`: TanStack route mapping `/skins` to `ExistSkinLibrary`.
   - `src/modules/runeforge/`: API queries and cached thumbnail helpers.
   - `src/lib/tauri.ts`: Typed IPC interface binding both core LTK services and Exist commands.
 
@@ -254,4 +255,16 @@ Exist LoL Manager extends LTK 1.27.0 with custom catalog and community features:
 1. **Selection Sync:** Uninstalling or deleting an enabled mod must unapply it first (`toggleMod(id, false)`), then remove it. This prevents ghost enabled entries in `library.json` active profile.
 2. **Artwork Caching:** RuneForge downloads must pass `thumbnailKey` to `install_runeforge_mod` to write `thumbnail.png` into the mod folder and record the metadata in `runeforge/installed_mods.json`.
 3. **Unified Count:** The sidebar Installed badge reflects `safeInstalled.length + localMods.filter(isRuneForgeMod).length`. Custom imported skins remain scoped under Custom Skins.
+4. **Anti-Skinhack Policy:** `enforce_skinhack_scan` in `crates/ltk-manager-base/src/config.rs` defaults to `false` so custom skins and champion WADs load without being blocked by anti-skinhack scan enforcement.
+5. **Release Packaging:** Windows builds use `pnpm tauri build --no-sign`. Installers are generated in `target/release/bundle/nsis/`.
 
+## Memory Bank
+
+Persistent architectural memory and operational context are maintained under `memory-bank/`:
+
+- `memory-bank/projectbrief.md`: Core project goals, scope, and foundation.
+- `memory-bank/productContext.md`: User problems solved, core user experience, and feature workflows.
+- `memory-bank/activeContext.md`: Current sprint status, recent release history, and immediate priorities.
+- `memory-bank/systemPatterns.md`: Tauri IPC patterns, state flow, catalog synchronization, and folder structures.
+- `memory-bank/techContext.md`: Toolchain, dependencies, Rust workspace crates, build constraints, and packaging.
+- `memory-bank/progress.md`: Working features, verified builds, and future roadmap.
